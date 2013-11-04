@@ -637,7 +637,7 @@
                             return new that.model(uri)
                         });
 
-                        that.set(models)
+                        that.set(models, {merge:false})
                     });
                 }
                 

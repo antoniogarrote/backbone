@@ -27,9 +27,18 @@
         }
     });
 
-    test("Should be able to craete a new Model object with new RDF data.", function() {
+    test("Should be able to create a collection from the RDF graph data.", function() {
         var users = this.Users.where("{ ?id a ex:User }");
         equal(users.length,2);
+    });
+
+    test("Should be able to change the size of the collection.", function() {
+        var users = this.Users.where("{ ?id a ex:User }");
+        equal(users.length,2);
+
+        Backbone.Linked.RDFStore.execute("INSERT DATA { ex:helena foaf:name 'Helena'; a ex:User }", function(){
+            equal(users.length,3);            
+        });
     });
 
 })();
