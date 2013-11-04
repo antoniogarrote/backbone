@@ -164,7 +164,10 @@
                         return "?p = <"+prop+">";
                     }).join(" || ");
                     var n3Data = JSONToNT(uri, properties)
-                    var query =  "DELETE { <"+uri+"> ?p ?o } INSERT { "+n3Data+" } WHERE { <"+uri+"> ?p ?o . FILTER("+conditions+") }";
+                    // Doing this in two queries
+                    var query =  "DELETE { <"+uri+"> ?p ?o } WHERE { <"+uri+"> ?p ?o . FILTER("+conditions+") }";
+                    RDFStore.execute(query);
+                    var query =  "INSERT DATA { "+n3Data+" }";
                     RDFStore.execute(query);
                 },
 
@@ -282,10 +285,9 @@
                         var value = acc[triple.predicate.valueOf()], object;
 
                         if(triple.object.interfaceName !== 'literal') {
-                            object = {type: 'uri',
-                                      value:  triple.object.valueOf()};
+                            object = '@id:'+triple.object.valueOf();
                         } else {
-                            obje = triple.object.valueOf();
+                            object = triple.object.valueOf();
                         }
                         if(value === undefined) {
                             acc[triple.predicate.valueOf()] = triple.object.valueOf();
@@ -348,6 +350,8 @@
                     object = (object.value === "true") ? true : false;
                 } else if(object.type === "http://www.w3.org/2001/XMLSchema#dateTime") {
                     object = new Date(object.value);
+                } else if(object.token === 'uri') {
+                    object = '@id:'+object.value;
                 }
                 return object;
             };
@@ -600,6 +604,12 @@
                     } else {
                         return RDFStore.rdf.createLiteral(value, null, "http://www.w3.org/2001/XMLSchema#float");
                     }
+                } else if(typeof(value) === 'string' && value.match(/^@val:\"(.+)\"\^\^\<(.+)\>$/)) {
+                    value = value.match(/\"(.+)\"\^\^\<(.+)\>$/)
+                    return RDFStore.rdf.createLiteral(value[1], null, value[2]);
+                } else if(typeof(value) === 'string' && value.match(/^@id:(.+)$/)) {
+                    value = RDFStorage.namespaces.safeResolve(value.split('@id:')[1]);
+                    return RDFStore.rdf.createNamedNode(value);
                 } else if(typeof(value) === 'string') {
                     return RDFStore.rdf.createLiteral(value);
                 } else {
@@ -638,7 +648,10 @@
 
                 constructor: function() {
                     var values, options;
-                    if(arguments.length == 1) {
+                    if(arguments.length === 1 && arguments[0].constructor === Array) {
+                        values = arguments[0];
+                        options = {};
+                    } else if(arguments.length === 1) {
                         values = [];
                         options = arguments[0];
                     } else {
@@ -670,6 +683,72 @@
 
                         that.set(models, {merge:false})
                     });
+                },
+
+                // Add a model, or list of models to the set.
+                // In our implementation, just add the membership
+                // triple to the models if no present.
+                add: function(models, options) {
+                    var that = this;
+                    models = _.map(models, function(model) {
+                        return that._prepareModel(model);
+                    });
+
+                    var subject,predicate,object,oldValue;
+
+                    if(!this.isReadWrite) throw new Error('Trying to insert in read-only Linked.Collection, non membership triple defined in the generator.');
+
+                    var singular = !_.isArray(models);
+                    models = singular ? (models ? [models] : []) : _.clone(models);
+                    
+                    if(that.generator.subject == null) {
+                        predicate = RDFStorage.namespaces.safeResolve(that.generator.predicate);
+                        subject = new LinkedModel(that.uri);
+                        oldValue = subject.get(predicate);
+                        if(oldValue == null) {
+                            subject.set(predicate,_.map(models, function(model){ return '@id:'+model.uri }));
+                        } else if(oldValue.constructor === Array) {
+                            // There's already an array of values, look for new models to append
+                            var toAdd = oldValue;
+                            var origLength = toAdd.length;
+                            _.each(models, function(model) {
+                                if(!_.contains(toAdd,'@id:'+model.uri))
+                                   toAdd.push('@id:'+model.uri);
+                            });
+                            if(toAdd.length !== origLength)
+                                subject.set(predicate,toAdd);
+                        } else {
+                            // Single value, look for URIs in the models to append
+                            var toAdd = [oldValue];
+                            _.each(models, function(model) {
+                                if('@id:'+model.uri !== oldValue) {
+                                    toAdd.push('@id:'+model.uri);
+                                }
+                            });
+                            if(toAdd.length !== 1) 
+                                subject.set(predicate,toAdd);
+                        }
+                    } else if(that.generator.subject === that.idVariable) {
+                        predicate = RDFStorage.namespaces.safeResolve(that.generator.predicate);
+                        if(that.generator.object == null) {
+                            object = that.uri;
+                        } else {
+                            object = '@id:'+RDFStorage.namespaces.safeResolve(that.generator.object);
+                        }
+
+                        _.each(models, function(model) {
+                            oldValue = model.get(predicate);
+                            if(oldValue == null) {
+                                model.set(predicate, object);
+                            } else if(oldValue.constructor === Array && !_.contains(oldValue, object)) {
+                                oldValue.push(object);
+                                model.set(predicate, oldValue);
+                            } else if(oldValue !== object){
+                                // Append the new value
+                                model.set(predicate,[oldValue,object]);
+                            } // else -> already present.
+                        });
+                    }
                 },
 
                 // Default values:
@@ -719,17 +798,18 @@
                 if(typeof(generator) === 'string') {
                     return generator;
                 } else {
-                    var query = "";
+
+                    var query = "", that = this;;
                     var bgp = _.map(['subject','predicate','object'], function(p) {
                         var val = generator[p];
                         if(val == null) {
-                            return "<"+this.uri+">";
-                        } else if(val === this.idVariable) {
-                            return "?"+this.idVariable;
+                            return "<"+that.uri+">";
+                        } else if(val === that.idVariable) {
+                            return "?"+that.idVariable;
                         } else {
-                            return "<"+RDFStorage.safeResolve(val)+">";
+                            return "<"+RDFStorage.namespaces.safeResolve(val)+">";
                         }
-                    });
+                    }).join(" ");
 
                     return "{ "+bgp+" }";
                 }

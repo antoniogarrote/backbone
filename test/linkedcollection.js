@@ -90,4 +90,28 @@
         deepEqual(changes.removed,['Caterina']);
         deepEqual(changes.changed,['Ana']);
     });
+
+    test("Should be able to populate a read-write collection", function() {
+        var TodosCollection = Backbone.Linked.Collection.extend({
+            generator: {subject: 'id', predicate: 'rdf:type', object:'ex:Todo'}
+        });
+
+        var todos = new TodosCollection([
+            {'ex:title': 'todo1',
+             'ex:text': 'the first todo'}
+        ]);
+
+        todos.add([
+            {'ex:title': 'todo2',
+             'ex:text': 'This is the second todo'},
+            {'ex:title': 'todo3',
+             'ex:text': 'This is the third todo'}
+        ]);
+
+        equal(todos.length, 3);
+
+        Backbone.Linked.RDFStore.execute("SELECT ?id { ?id a ex:Todo }",function(success, res) {
+            equal(res.length,3);
+        });
+    });
 })();
