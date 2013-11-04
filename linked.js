@@ -209,9 +209,9 @@
                 },
 
                 trigger: function(name) {
-                    name = normalizeNameEvent(name);
-                    var args = Array.prototype.slice.call(arguments,1);
-                    args.unshift(name);
+                    var args = Array.prototype.slice.call(arguments,0);
+                    var normalizedName = normalizeNameEvent(args.shift());
+                    args.unshift(normalizedName);
                     return Backbone.Events.trigger.apply(this,args);
                 },
 
@@ -635,19 +635,34 @@
             // authomatically as the properties of the RDF graph are 
             // modified or new nodes are added or removed from the graph.
             var LinkedCollection = Backbone.Linked.Collection = Backbone.Collection.extend({
-                constructor: function(query, options) {
-                    this.generator = query;
+
+                constructor: function() {
+                    var values, options;
+                    if(arguments.length == 1) {
+                        values = [];
+                        options = arguments[0];
+                    } else {
+                        values = arguments[0];
+                        options = arguments[1];
+                    }
+
                     options = (options||{});
-                    this.idVariable = options['idVariable'] || "id";
+
+                    // Variable name used to identify the variable
+                    // matching the nodes belonging to this collection.
+                    this.uri = options['uri'] || nextAnonModelURI();
                     this.cid = "collection:"+nextAnonModelURI().split("#")[1];
 
-                    // LinkedModel by default
-                    options.model = options.model || LinkedModel;
+                    this.query = generatorToQuery.call(this,this.generator);
+
+                    // can the collection be updated?
+                    this.isReadWrite = (typeof(this.generator) !== 'string');
+
                     var that = this;
 
-                    Backbone.Collection.apply(this,[[],options]);
+                    Backbone.Collection.apply(this,[values,options]);
 
-                    RDFStorage.startObservingQuery(this.cid, this.generator, options, function(nodes) {
+                    RDFStorage.startObservingQuery(this.cid, this.query, options, function(nodes) {
                         var models = _.map(nodes, function(node) {
                             var uri = node[that.idVariable].value;
                             return new that.model(uri)
@@ -655,7 +670,36 @@
 
                         that.set(models, {merge:false})
                     });
+                },
+
+                // Default values:
+                
+                idVariable: 'id',
+
+                generator: {predicate:'rdfs:member', object:this.idVariable},
+
+                model: LinkedModel,
+
+                // Internal method called every time a model in the set fires an event.
+                _onModelEvent: function(event, model, collection, options) {
+                    if ((event === 'add' || event === 'remove') && collection !== this) return;
+
+                    // This should not be necessary. The model should already be removed
+                    // due to store callback
+                    //if (event === 'destroy') this.remove(model, options);
+
+                    // This should not happen.
+                    // If a model changes its ID by removing its old triples,
+                    // the old model should already be removed from the collection
+                    if (model && event === 'change:' + model.idAttribute) {
+                        delete this._byId[model.previous(model.idAttribute)];
+                        if (model.id != null) this._byId[model.id] = model;
+                    }
+
+                    // Still doing this.
+                    this.trigger.apply(this, arguments);
                 }
+
                 
             });
 
@@ -669,8 +713,33 @@
             RDFStorage.mixinListerMethods(LinkedCollection.prototype);
 
 
+            // Private helper functions for LinkedCollections
+
+            var generatorToQuery = function(generator) {
+                if(typeof(generator) === 'string') {
+                    return generator;
+                } else {
+                    var query = "";
+                    var bgp = _.map(['subject','predicate','object'], function(p) {
+                        var val = generator[p];
+                        if(val == null) {
+                            return "<"+this.uri+">";
+                        } else if(val === this.idVariable) {
+                            return "?"+this.idVariable;
+                        } else {
+                            return "<"+RDFStorage.safeResolve(val)+">";
+                        }
+                    });
+
+                    return "{ "+bgp+" }";
+                }
+            };
+
             // Finishing
             // ---------
+
+            // Registering the LDP prefix
+            RDFStorage.namespaces.register("ldp","http://www.w3.org/ns/ldp#");
             
             // Invoke the callback after initialization
             if(cb != null)
