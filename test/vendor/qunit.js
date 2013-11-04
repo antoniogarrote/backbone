@@ -175,6 +175,10 @@ Test.prototype = {
 		try {
 			this.testEnvironment.setup.call( this.testEnvironment, QUnit.assert );
 		} catch( e ) {
+        console.log("ERROR Setting up test");
+        console.log(e.message);
+        console.log(e);
+        debugger;
 			QUnit.pushFailure( "Setup failed on " + this.testName + ": " + ( e.message || e ), extractStacktrace( e, 1 ) );
 		}
 	},
@@ -425,6 +429,9 @@ QUnit = {
 			stack: sourceFromStacktrace( 2 )
 		});
 
+      console.log(test);
+      console.log(test.testName);
+      console.log(test.callback);
 		if ( !validTest( test ) ) {
 			return;
 		}
