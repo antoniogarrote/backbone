@@ -429,9 +429,6 @@ QUnit = {
 			stack: sourceFromStacktrace( 2 )
 		});
 
-      console.log(test);
-      console.log(test.testName);
-      console.log(test.callback);
 		if ( !validTest( test ) ) {
 			return;
 		}

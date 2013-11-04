@@ -607,6 +607,52 @@
                     + pad(date.getUTCSeconds())+'Z';
             };
 
+
+            // Backbone.Linked.Collection
+            // ---------------------
+
+            // LinkedCollections are Backbone collections that are
+            // bound to an specific SPARQL query.
+            // Unlike Backbone default collections, LinkedCollections
+            // do not offer interface methods for adding or removing
+            // models to the collection, but they will grow or shrink
+            // authomatically as the properties of the RDF graph are 
+            // modified or new nodes are added or removed from the graph.
+            var LinkedCollection = Backbone.Linked.Collection = Backbone.Collection.extend({
+                constructor: function(query, options) {
+                    this.generator = query;
+                    options = (options||{});
+                    this.idVariable = options['idVariable'] || "id";
+                    this.cid = "collection:"+nextAnonModelURI().split("#")[1];
+
+                    // LinkedModel by default
+                    options.model = options.model || LinkedModel;
+                    var that = this;
+
+                    Backbone.Collection.apply(this,[[],options]);
+
+                    RDFStorage.startObservingQuery(this.cid, this.generator, options, function(nodes) {
+                        var models = _.map(nodes, function(node) {
+                            var uri = node[that.idVariable].value;
+                            return new that.model(uri)
+                        });
+
+                        that.set(models)
+                    });
+                }
+                
+            });
+
+            // Instantiates the collection for the provided
+            // query. Just an alias for new.
+            LinkedCollection.where = function(query, options) {
+                return new this(query, options);
+            };
+
+            // Mixin RDFStorage listener methods
+            RDFStorage.mixinListerMethods(LinkedCollection.prototype);
+
+
             // Finishing
             // ---------
             
