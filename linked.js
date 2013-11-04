@@ -399,14 +399,23 @@
                         this.uri = data['@id'] || nextAnonModelURI();
                         data['@id'] = this.uri;
 
+                        // Look into the cache for instances of this object;
+                        if(LinkedModel.cache.fetch(this.uri))
+                            return LinkedModel.cache.fetch(this.uri);
+
                         // We're pushing data into the store, not receiving an update from the store
                         this.rdfPushed = false;
 
                         // Default Backbone constructor
                         Backbone.Model.apply(this,[data,options]);
+                        LinkedModel.cache[this.uri] = this;
                     } else {
                         // The URI of the associated node is provided in the data
                         this.uri = RDFStorage.namespaces.safeResolve(data);
+
+                        // Look into the cache for instances of this object;
+                        if(LinkedModel.cache.fetch(this.uri))
+                            return LinkedModel.cache.fetch(this.uri);
 
                         // We're expecting for the store to send us the data
                         this.rdfPushed = true;
@@ -454,6 +463,9 @@
                         if(shouldInitialize) 
                             that.trigger('rdf:initalized',this,node);
                     });
+
+                    // Save in the cache
+                    LinkedModel.cache[this.uri] = this;
                 },
 
                 // JSON-LD style
@@ -548,6 +560,15 @@
 
             // Mixin RDFStorage listener methods
             RDFStorage.mixinListerMethods(LinkedModel.prototype);
+
+            // LinkedModels cache
+            LinkedModel.cache = {};
+            LinkedModel.cache.fetch = function(uri) {
+                return LinkedModel.cache[uri];
+            }
+            LinkedModel.cache.remove = function(uri) {
+                delete LinkedModel.cache[uri];
+            }
 
             // Private Linked Model helper functions
 

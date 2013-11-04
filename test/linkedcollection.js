@@ -26,12 +26,12 @@
             });
         }
     });
-
+/*
     test("Should be able to create a collection from the RDF graph data.", function() {
         var users = this.Users.where("{ ?id a ex:User }");
         equal(users.length,2);
     });
-
+*/
     test("Should be able to change the size of the collection.", function() {
         var users = this.Users.where("{ ?id a ex:User }");
         equal(users.length,2);
