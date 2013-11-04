@@ -24,12 +24,14 @@
     });
 
     asyncTest("Should be able to craete a new Model object with new RDF data.", function() {
-        expect(4);
+        expect(5);
         var cate = new this.User({"foaf:name":"Caterina",
                                   "foaf:account":"cate.cova@service.com"});
         
         var name = cate.get("foaf:name");
         equal(name, "Caterina");
+        var account = cate.get("foaf:account");
+        equal(account, "cate.cova@service.com");
 
         Backbone.Linked.RDFStore.execute("SELECT ?uri { ?uri foaf:name 'Caterina' }", function(success, res) {
             equal(res.length, 1);

@@ -159,21 +159,26 @@
                 // Modifies a single node provided its URI and the new
                 // node N3 data using an SPARQL UPDATE DELETE/INSERT/WHERE query
                 // to update the node in the store;
-                modifyNode: function(uri, n3Data) {
-                    var query =  "DELETE { <"+uri+"> ?p ?o } INSERT { "+n3Data+" } WHERE { <"+uri+"> ?p ?o }";
+                modifyNode: function(uri, properties) {
+                    var conditions = _.map(_.keys(properties), function(prop) {
+                        return "?p = <"+prop+">";
+                    }).join(" || ");
+                    var n3Data = JSONToNT(uri, properties)
+                    var query =  "DELETE { <"+uri+"> ?p ?o } INSERT { "+n3Data+" } WHERE { <"+uri+"> ?p ?o . FILTER("+conditions+") }";
                     RDFStore.execute(query);
                 },
 
                 // Write the information about a node into the store using
                 // a RDF INSERT DATA query.
-                writeNode: function(uri, n3Data) {
+                writeNode: function(uri, properties) {
+                    var n3Data = JSONToNT(uri, properties)
                     var query =  "INSERT DATA { "+n3Data+" }";
                     RDFStore.execute(query);
                 },
 
                 // Removes some properties for a RDF node
                 removePropertiesFromNode: function(uri, properties) {
-                    var conditions = _.map(properties, function(prop) {
+                    var conditions = _.map(_.keys(properties), function(prop) {
                         return "?p = <"+prop+">";
                     }).join(" || ");
                     var query =  "DELETE { <"+uri+"> ?p ?o } WHERE { <"+uri+"> ?p ?o . FILTER("+conditions+") }";
@@ -513,20 +518,10 @@
 
                         if((options||{}).unset === true) {
                             // Performing RDF graph update.
-                            this.removePropertiesFromNode(that.uri, _.keys(attrs));
+                            this.removePropertiesFromNode(that.uri, attrs);
                         } else {
-                            allprops = _.unique(_.keys(attrs).concat(_.keys(this.attributes)));
-                            // rdfAttrs should have the same value than attributes after
-                            // invoking backbone set implementation
-                            rdfAttrs = _.reduce(allprops, function(acc, prop) {
-                                var val = (attrs[prop] || that.attributes[prop]);
-                                acc[prop] = val;
-                                return acc;
-                            },{});
-
-                            
                             // Performing RDF graph update.
-                            this.modify(rdfAttrs);
+                            this.modify(attrs);
                         }
                     }
 
@@ -541,9 +536,9 @@
                 modify: function() {
                     var attrs = arguments[0] || this.attributes;
                     if(this.initialized === true) 
-                        RDFStorage.modifyNode(this.uri, JSONToNT(this.uri, attrs));
+                        RDFStorage.modifyNode(this.uri, attrs);
                     else
-                        RDFStorage.writeNode(this.uri, JSONToNT(this.uri, attrs));
+                        RDFStorage.writeNode(this.uri, attrs);
                 },
 
                 // Removes the representation of the node from the store
