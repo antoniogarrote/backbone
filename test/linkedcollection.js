@@ -64,14 +64,17 @@
         }
 
         users.on('add', function(user) {
+            //console.log("** ADDED "+user.uri);
             changes.added.push(user.get('foaf:name'));
         });
 
         users.on('remove', function(user) {
+            //console.log("** REMOVED "+user.uri);
             changes.removed.push(user.get('foaf:name'));
         });
 
         users.on('change',function(user) {
+            //console.log("** CHANGED "+user.uri);
             changes.changed.push(user.get('foaf:name'));
         });
 
@@ -92,6 +95,9 @@
     });
 
     test("Should be able to populate a read-write collection", function() {
+        // This todo should already be in the store (and the collection). It's also a Note.
+        Backbone.Linked.RDFStore.execute("INSERT DATA { ex:todo0 a ex:Todo, ex:Note ; ex:title 'ground zero note' }")
+
         var TodosCollection = Backbone.Linked.Collection.extend({
             generator: {subject: 'id', predicate: 'rdf:type', object:'ex:Todo'}
         });
@@ -101,6 +107,12 @@
              'ex:text': 'the first todo'}
         ]);
 
+        equal(todos.length, 2);
+
+        var zero = todos.at(0);
+        equal(zero.get('rdf:type').length,2)
+        equal(zero.get('ex:title'),'ground zero note');
+
         todos.add([
             {'ex:title': 'todo2',
              'ex:text': 'This is the second todo'},
@@ -108,10 +120,30 @@
              'ex:text': 'This is the third todo'}
         ]);
 
-        equal(todos.length, 3);
+        equal(todos.length, 4);
 
         Backbone.Linked.RDFStore.execute("SELECT ?id { ?id a ex:Todo }",function(success, res) {
-            equal(res.length,3);
+            equal(res.length,4);
         });
     });
+
+    test("It should be able to remove nodes from a collection", function() {
+        Backbone.Linked.RDFStore.execute("INSERT DATA { ex:todo0 a ex:Todo, ex:Note ; ex:title 'ground zero note' }")
+
+        var TodosCollection = Backbone.Linked.Collection.extend({
+            generator: {subject: 'id', predicate: 'rdf:type', object:'ex:Todo'}
+        });
+
+        var todos = new TodosCollection([
+            {'ex:title': 'todo1',
+             'ex:text': 'the first todo'}
+        ]);
+
+        equal(todos.length, 2);
+
+        todos.remove("ex:todo0");
+
+        equal(todos.length, 1);        
+    });
+
 })();

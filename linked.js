@@ -171,11 +171,31 @@
                     RDFStore.execute(query);
                 },
 
-                // Write the information about a node into the store using
-                // a RDF INSERT DATA query.
-                writeNode: function(uri, properties) {
-                    var n3Data = JSONToNT(uri, properties)
-                    var query =  "INSERT DATA { "+n3Data+" }";
+
+                writeNodesProperties: function(uris, properties) {
+                    if(uris.constructor !== Array) {
+                        uris = [uris];
+                        properties = [properties];
+                    }
+                    var acum = [];
+                    for(var i=0; i<uris.length; i++) {
+                        acum.push(JSONToNT(uris[i],properties[i]));
+                    }
+                    var query = "INSERT DATA { "+acum.join("\n")+" }";
+                    RDFStore.execute(query);
+                },
+
+                deleteNodesProperties: function(uris, properties) {
+                    if(uris.constructor !== Array) {
+                        uris = [uris];
+                        properties = [properties];
+                    }
+
+                    var acum = [];
+                    for(var i=0; i<uris.length; i++) {
+                        acum.push(JSONToNT(uris[i],properties[i]));
+                    }
+                    var query = "DELETE DATA { "+acum.join("\n")+" }";
                     RDFStore.execute(query);
                 },
 
@@ -542,7 +562,7 @@
                     if(this.initialized === true) 
                         RDFStorage.modifyNode(this.uri, attrs);
                     else
-                        RDFStorage.writeNode(this.uri, attrs);
+                        RDFStorage.writeNodesProperties(this.uri, attrs);
                 },
 
                 // Removes the representation of the node from the store
@@ -668,6 +688,9 @@
 
                     this.query = generatorToQuery.call(this,this.generator);
 
+                    // We're pushing data into the store, not receiving an update from the store
+                    this.rdfPushed = false;
+
                     // can the collection be updated?
                     this.isReadWrite = (typeof(this.generator) !== 'string');
 
@@ -681,7 +704,9 @@
                             return new that.model(uri)
                         });
 
+                        that.rdfPushed = true;
                         that.set(models, {merge:false})
+                        that.rdfPushed = false;
                     });
                 },
 
@@ -689,14 +714,14 @@
                 // In our implementation, just add the membership
                 // triple to the models if no present.
                 add: function(models, options) {
+                    if(!this.isReadWrite) throw new Error('Trying to insert in read-only Linked.Collection, non membership triple defined in the generator.');
+
                     var that = this;
                     models = _.map(models, function(model) {
                         return that._prepareModel(model);
                     });
 
                     var subject,predicate,object,oldValue;
-
-                    if(!this.isReadWrite) throw new Error('Trying to insert in read-only Linked.Collection, non membership triple defined in the generator.');
 
                     var singular = !_.isArray(models);
                     models = singular ? (models ? [models] : []) : _.clone(models);
@@ -749,6 +774,55 @@
                             } // else -> already present.
                         });
                     }
+                },
+
+                // Remove a model, or a list of models from the set.
+                remove: function(models, options) {
+                    if(this.rdfPushed) {
+                        this.rdfPushed = false;
+                        return Backbone.Collection.prototype.remove.apply(this,[models,options]);
+                    }
+                    if(!this.isReadWrite) throw new Error('Trying to remove from read-only Linked.Collection, non membership triple defined in the generator.');
+                    var singular = !_.isArray(models);
+                    models = singular ? [models] : _.clone(models);
+                    options || (options = {});
+                    var that = this;
+                    models = _.map(models, function(model) {
+                        if(typeof(model) === 'string') {
+                            if(model.indexOf("@id:") === 0) {
+                                model= new that.model(RDFStorage.namespaces.safeResolve(model.split("@id:")[1]));
+                            } else {
+                                model= new that.model(RDFStorage.namespaces.safeResolve(model));
+                            }
+                        }
+                        return that.get(model);
+                    });
+                    models = _.compact(models);
+
+                    if(this.generator.subject == null) {
+                        predicate = RDFStorage.namespaces.safeResolve(that.generator.predicate);
+                        var nodeToRemove = {};
+                        var objectsToRemove = _.map(models, function(model) {
+                            return "@id:"+mode.uri;
+                        });
+                        nodeToRemove[predicate] = objectsToRemove;
+                        RDFStorage.deleteNodesProperties(that.uri, nodeToRemove);
+                    } else {
+                        predicate = RDFStorage.namespaces.safeResolve(that.generator.predicate);
+                        if(that.generator.object == null) {
+                            object = that.uri;
+                        } else {
+                            object = '@id:'+RDFStorage.namespaces.safeResolve(that.generator.object);
+                        }
+                        var nodesToRemove = _.map(models, function(model) {
+                            var node = {};
+                            node[predicate] = object;
+                            return node;
+                        });
+                        var urisToRemove = _.map(models, function(model){ return model.uri });
+                        RDFStorage.deleteNodesProperties(urisToRemove, nodesToRemove);
+                    }
+                    return singular ? models[0] : models;
                 },
 
                 // Default values:
