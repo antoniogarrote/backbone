@@ -856,12 +856,6 @@
                 
             });
 
-            // Instantiates the collection for the provided
-            // query. Just an alias for new.
-            LinkedCollection.where = function(query, options) {
-                return new this(query, options);
-            };
-
             // Mixin RDFStorage listener methods
             RDFStorage.mixinListerMethods(LinkedCollection.prototype);
 
