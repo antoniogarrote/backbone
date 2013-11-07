@@ -99,7 +99,7 @@
         Backbone.Linked.RDFStore.execute("INSERT DATA { ex:todo0 a ex:Todo, ex:Note ; ex:title 'ground zero note' }")
 
         var TodosCollection = Backbone.Linked.Collection.extend({
-            generator: {subject: 'id', predicate: 'rdf:type', object:'ex:Todo'}
+            generator: {subject: 'ldp:MemberSubject', predicate: 'rdf:type', object:'ex:Todo'}
         });
 
         var todos = new TodosCollection([
@@ -131,7 +131,7 @@
         Backbone.Linked.RDFStore.execute("INSERT DATA { ex:todo0 a ex:Todo, ex:Note ; ex:title 'ground zero note' }")
 
         var TodosCollection = Backbone.Linked.Collection.extend({
-            generator: {subject: 'id', predicate: 'rdf:type', object:'ex:Todo'}
+            generator: {subject: 'ldp:MemberSubject', predicate: 'rdf:type', object:'ex:Todo'}
         });
 
         var todos = new TodosCollection([
