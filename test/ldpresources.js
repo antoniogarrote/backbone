@@ -11,18 +11,20 @@
     });
 
     asyncTest("Should be able to fetch ane existing LDPResource", function() {
-        debugger;
         var xdir = new Backbone.Linked.Collection({uri:'https://localhost:8443/2013/XDir/'});
         xdir.fetch({
             success: function(container){
                 equal(container.uri,'https://localhost:8443/2013/XDir/');
                 equal(container.get('foaf:maker'), '@id:https://localhost:8443/2013/card#me');
-                debugger;
                 xdir.create({'foaf:name':'foo thing'},{
                     success:function(model, resp, options) {
-                        
-                        model.set('ex:other','bar');
-                        model.save();
+                        //model.set('ex:other','bar');
+                        //model.save();
+                        model.destroy({
+                            success: function(resp) {
+                                console.log("YES!");
+                            }
+                        });
                         start();
                     }
                 });

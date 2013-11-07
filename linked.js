@@ -3,10 +3,6 @@
     // Initial Setup
     // -------------
 
-    // Save a reference to the global object (`window` in the browser, `exports`
-    // on the server).
-    var root = this;
-
     if(typeof Backbone === 'undefined')
         console.log("* LinkedBackbone [Error] Backbone not detected");
 
@@ -305,7 +301,20 @@
             };
 
             // Private helper functions 
+
+            // Transforms an URI into a string that can be stored in the attributes hash of an object.
+            var uriProp = function(uri) {
+                return '@id:'+uri;
+            };
+
+            var propUri = function(value) {
+                return RDFStorage.namespaces.safeResolve(value.split('@id:')[1]);
+            };
             
+            var isPropUri = function(value) {
+                return typeof(value) === 'string' && value.match(/^@id:.+$/)
+            }
+
             // Function to build JSON Objects from RDFJSInterfaces API graphs
             var jsIntefaceToJSON = function(subjectURI,node) {
                 return _.reduce(node.toArray(), function(acc, triple) {
@@ -313,7 +322,7 @@
                         var value = acc[triple.predicate.valueOf()], object;
 
                         if(triple.object.interfaceName !== 'Literal') {
-                            object = '@id:'+triple.object.valueOf();
+                            object = uriProp(triple.object.valueOf());
                         } else {
                             object = triple.object.valueOf();
                         }
@@ -379,7 +388,7 @@
                 } else if(object.type === "http://www.w3.org/2001/XMLSchema#dateTime") {
                     object = new Date(object.value);
                 } else if(object.token === 'uri') {
-                    object = '@id:'+object.value;
+                    object = uriProp(object.value);
                 }
                 return object;
             };
@@ -634,6 +643,17 @@
                     return this.sync('read', this, options);
                 },
 
+                destroy: function(options) {
+                    var oldSuccess = options.success;
+                    var model = this;
+                    options.success = function(resp) {
+                        LinkedModel.cache.remove(model.uri);
+                        RDFStorage.unlinkNode(model.uri);
+                        if(oldSuccess) oldSuccess(resp);
+                    };
+                    Backbone.Model.prototype.destroy.call(this, options);
+                },
+
                 parse: function(resp, options) {
                     if(typeof(resp) === 'string') {
                         resp = resp.replace(/\<\>/g,"<"+this.uri+">");
@@ -741,8 +761,8 @@
                 } else if(typeof(value) === 'string' && value.match(/^@val:\"(.+)\"\^\^\<(.+)\>$/)) {
                     value = value.match(/\"(.+)\"\^\^\<(.+)\>$/);
                     return RDFStore.rdf.createLiteral(value[1], null, value[2]);
-                } else if(typeof(value) === 'string' && value.match(/^@id:(.+)$/)) {
-                    value = RDFStorage.namespaces.safeResolve(value.split('@id:')[1]);
+                } else if(isPropUri(value)) {
+                    value = propUri(value);
                     return RDFStore.rdf.createNamedNode(value);
                 } else if(typeof(value) === 'string') {
                     return RDFStore.rdf.createLiteral(value);
@@ -874,14 +894,14 @@
                         predicate = this.generator.predicate;
                         oldValue = collection.graph.get(predicate);
                         if(oldValue == null) {
-                            collection.graph.set(predicate,_.map(models, function(model){ return '@id:'+model.uri }));
+                            collection.graph.set(predicate,_.map(models, function(model){ return uriProp(model.uri); }));
                         } else if(oldValue.constructor === Array) {
                             // There's already an array of values, look for new models to append
                             var toAdd = oldValue;
                             var origLength = toAdd.length;
                             _.each(models, function(model) {
-                                if(!_.contains(toAdd,'@id:'+model.uri))
-                                   toAdd.push('@id:'+model.uri);
+                                if(!_.contains(toAdd,uriProp(model.uri)))
+                                   toAdd.push(uriProp(model.uri));
                             });
                             if(toAdd.length !== origLength)
                                 collection.graph.set(predicate,toAdd);
@@ -889,8 +909,8 @@
                             // Single value, look for URIs in the models to append
                             var toAdd = [oldValue];
                             _.each(models, function(model) {
-                                if('@id:'+model.uri !== oldValue) {
-                                    toAdd.push('@id:'+model.uri);
+                                if(uriProp(model.uri) !== oldValue) {
+                                    toAdd.push(uriProp(model.uri));
                                 }
                             });
                             if(toAdd.length !== 1) 
@@ -899,9 +919,9 @@
                     } else if(this.generator.subject === RDFStorage.namespaces.safeResolve('ldp:MemberSubject')) {
                         predicate = this.generator.predicate;
                         if(this.generator.object === "<>" || this.generator.object === collection.uri) {
-                            object = '@id:'+collection.uri;
+                            object = uriProp(collection.uri);
                         } else {
-                            object = '@id:'+this.generator.object;
+                            object = uriProp(this.generator.object);
                         }
 
                         _.each(models, function(model) {
@@ -945,15 +965,15 @@
                     if(this.generator.subject == null) {
                         var nodeToRemove = {};
                         var objectsToRemove = _.map(models, function(model) {
-                            return "@id:"+model.uri;
+                            return uriProp(model.uri);
                         });
                         nodeToRemove[predicate] = objectsToRemove;
                         RDFStorage.deleteNodesProperties(this.uri, nodeToRemove);
                     } else {
                         if(this.generator.object === "<>" || this.generator.object === this.uri) {
-                            object = '@id:'+uri;
+                            object = uriProp(uri);
                         } else {
-                            object = '@id:'+this.generator.object;
+                            object = uriProp(this.generator.object);
                         }
                         var nodesToRemove = _.map(models, function(model) {
                             var node = {};
@@ -1055,12 +1075,12 @@
 
                     if(this.isReadWrite) {
                         var attributes = {
-                            'rdf:type': ['ldp:Container']
+                            'rdf:type': [uriProp(RDFStorage.namespaces.safeResolve('ldp:Container'))]
                         };
                         if(this.generator == null) {
-                            attributes['ldp:membershipSubject'] = subject;
-                            attributes['ldp:membershipPredicate'] = RDFStorage.namespaces.safeResolve(this.generator.predicate);
-                            attributes['ldp:membershipObject'] = RDFStorage.namespaces.safeResolve('ldp:MemberSubject');
+                            attributes['ldp:membershipSubject'] = uriProp(subject);
+                            attributes['ldp:membershipPredicate'] = uriProp(RDFStorage.namespaces.safeResolve(this.generator.predicate));
+                            attributes['ldp:membershipObject'] = uriProp(RDFStorage.namespaces.safeResolve('ldp:MemberSubject'));
                         }
                         var modelsMembershipObjects = _.map(this.models, function(model) {
                             return model.uri;
@@ -1128,17 +1148,17 @@
                         // Not backed by a remote LDP container yet.
                         // Let's setup the properties based in the constructor information.
                         var attributes = {'@id': collection.uri,
-                                          'rdf:type': RDFStorage.namespaces.safeResolve('lbb:Collection')};
+                                          'rdf:type': uriProp(RDFStorage.namespaces.safeResolve('lbb:Collection'))};
                         if(collection.generator.subject == null) {
-                            attributes['ldp:membershipSubject'] = '@id:'+collection.uri;
-                            attributes['ldp:membershipPredicate'] = '@id:'+RDFStorage.namespaces.safeResolve(collection.generator.predicate);
-                            attributes['ldp:membershipObject'] = '@id:'+RDFStorage.namespaces.safeResolve('ldp:MemberSubject');
+                            attributes['ldp:membershipSubject'] = uriProp(collection.uri);
+                            attributes['ldp:membershipPredicate'] = uriProp(RDFStorage.namespaces.safeResolve(collection.generator.predicate));
+                            attributes['ldp:membershipObject'] = uriProp(RDFStorage.namespaces.safeResolve('ldp:MemberSubject'));
 
                             return new LinkedModel(attributes);
                         } else {
-                            attributes['ldp:membershipSubject'] = '@id:'+RDFStorage.namespaces.safeResolve(collection.generator.subject);
-                            attributes['ldp:membershipPredicate'] = '@id:'+RDFStorage.namespaces.safeResolve(collection.generator.predicate);
-                            attributes['ldp:membershipObject'] = '@id:'+RDFStorage.namespaces.safeResolve(collection.generator.object);
+                            attributes['ldp:membershipSubject'] = uriProp(RDFStorage.namespaces.safeResolve(collection.generator.subject));
+                            attributes['ldp:membershipPredicate'] = uriProp(RDFStorage.namespaces.safeResolve(collection.generator.predicate));
+                            attributes['ldp:membershipObject'] = uriProp(RDFStorage.namespaces.safeResolve(collection.generator.object));
 
                             return new LinkedModel(attributes);
                         }
@@ -1157,7 +1177,7 @@
                 } else {
                     // Plain collection not a container.
                     var attributes = {'@id': collection.uri,
-                                      'rdf:type': RDFStorage.namespaces.safeResolve('lbb:DataView')};
+                                      'rdf:type': uriProp(RDFStorage.namespaces.safeResolve('lbb:DataView'))};
                     return new LinkedModel(attributes);
                 }
             };
