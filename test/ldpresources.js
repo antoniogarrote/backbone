@@ -10,6 +10,7 @@
         }
     });
 
+/*
     asyncTest("Should be able to fetch ane existing LDPResource", function() {
         var xdir = new Backbone.Linked.Collection({uri:'https://localhost:8443/2013/XDir/'});
         xdir.fetch({
@@ -31,4 +32,16 @@
             }
         });
     });
+*/
+
+    asyncTest("Should be possible to create nested collections", function() {
+        var root = new Backbone.Linked.Collection({uri:'https://localhost:8443/2013/'});
+        root.fetch({
+            success: function(container) {
+                debugger;
+                start();
+            }
+        });
+    });
+
 })();

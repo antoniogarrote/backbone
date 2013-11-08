@@ -849,6 +849,8 @@
 
                     var collection = this;
                     this.graph.on('change', function(model) {
+                        // URI will change if we craete the collection
+                        collection.uri = model.uri;
                         if(model.has('ldp:MembershipSubject')) {
                             collection.generator.subject = model.get('ldp:MembershipSubject');
                             collection.generator.predicate = model.get('ldp:MembershipPredicate');
@@ -953,7 +955,7 @@
                     models = _.map(models, function(model) {
                         if(typeof(model) === 'string') {
                             if(model.indexOf("@id:") === 0) {
-                                model= new collection.model(RDFStorage.namespaces.safeResolve(model.split("@id:")[1]));
+                                model= new collection.model(RDFStorage.namespaces.safeResolve(propUri(model)));
                             } else {
                                 model= new collection.model(RDFStorage.namespaces.safeResolve(model));
                             }
@@ -988,14 +990,16 @@
 
                 // Container methods
 
-                // Captures successful execution to mutate the model after
+                // Overriden version that just captures successful execution 
+                // in order to mutate the model after
                 // invoking the Backbone.Model version of the create function
                 create: function(model, options) {
+                    if(model.prototype === LinkedCollection) model = model.graph;
                     var oldSuccess = options.success;
                     options.success = function(model, resp, options) {
                         var newModelUri = options.xhr.getResponseHeader("Location");
                         if(newModelUri == null)
-                            throw new Error("The server notified a successful LDP Resource creation but si not returning the Location header");
+                            throw new Error("The server notified a successful LDP Resource creation but is not returning a Location header");
                         model.mutate(newModelUri);
                         if(oldSuccess) oldSuccess(model, resp, options);
                     };
@@ -1012,9 +1016,6 @@
                     };
                     this.graph.fetch(options);
                 },
-
-                // Saves or creates a representation of this collection as a LDP Container.
-                save: function(options) { },
 
                 destroy: function() { },
 
