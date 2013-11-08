@@ -328,7 +328,7 @@
                         }
                         if(value === undefined) {
                             acc[triple.predicate.valueOf()] = object;
-                        } else if(value.prototype === Array) {
+                        } else if(value.constructor === Array) {
                             value.push(object);
                         } else {
                             acc[triple.predicate.valueOf()] = [value, object];
@@ -444,6 +444,7 @@
                     this.initialized = false;
 
                     if(typeof(data) === 'object') {
+
                         this.uri = data['@id'] || nextAnonModelURI();
                         data['@id'] = this.uri;
 
@@ -632,6 +633,7 @@
                     options.success = function(resp) {
                         options.parseCallback = function(result, node) {
                             if(result) {
+                                // This should be trigger automatically
                                 model.syncRDFNodeCallback(node);
                                 success(model, resp, options);
                                 model.trigger('sync', model, resp, options);
@@ -656,31 +658,51 @@
 
                 parse: function(resp, options) {
                     if(typeof(resp) === 'string') {
-                        resp = resp.replace(/\<\>/g,"<"+this.uri+">");
+                        resp = resp.replace(/<>/g,"<"+this.uri+">");
                         var model = this;
-                        rdfstore.create(function(g){
-                            var result, uri;
-                            var accum = {};
-                            // @todo: check parser for media type
-                            g.load("text/n3", resp, function(success, results) {
-                            // g.execute("SELECT DISTINCT ?s { ?s ?p ?o }", function(success, results) {
-                            //     _.each(results, function(tuple) {
-                            //         uri = tuple['s'].value;
-                            //         g.node(uri, function(graph) {
-                            //             accum[uri] = graph;
-                            //         });
-                            //     });
-                            // });
-                                g.node(model.uri, function(res, node){
-                                    if(res) {
-                                        if(options && options.parseCallback) 
-                                            options.parseCallback(res, jsIntefaceToJSON(model.uri, node));
-                                    } else if(options && options.parseCallback) {
-                                        options.parseCallback(res, node);
-                                    }
-                                });
+                        // @todo: check parser for media type
+                        //RDFStore.setBatchLoadEvents(true);
+                        RDFStore.load("text/n3", resp, function(success, results) {
+                            //RDFStore.setBatchLoadEvents(false);
+                            RDFStore.node(model.uri, function(res, node){
+                                if(options && options.parseCallback) 
+                                    options.parseCallback(res, jsIntefaceToJSON(model.uri, node));
                             });
                         });
+
+                        // var model = this;
+                        // rdfstore.create(function(g){
+                        //     var result, uri;
+                        //     var accum = {};
+                        //     // @todo: check parser for media type
+                        //     g.load("text/n3", resp, function(success, results) {
+                        //     // g.execute("SELECT DISTINCT ?s { ?s ?p ?o }", function(success, results) {
+                        //     //     _.each(results, function(tuple) {
+                        //     //         uri = tuple['s'].value;
+                        //     //         g.node(uri, function(graph) {
+                        //     //             accum[uri] = graph;
+                        //     //         });
+                        //     //     });
+                        //     // });
+                        //         g.node(model.uri, function(res, node){
+                        //             if(res) {
+                        //                 if(options && options.includeAll) {
+                        //                     var query = "construct { ?s ?p ?o } where { ?s ?p ?o . filter(?s != <"+model.uri+">) }";
+                        //                     g.execute(query, function(s,graph) { 
+                        //                         var graphTriples = jsIntefaceToJSON(graph
+                        //                         if(options && options.parseCallback) 
+                        //                             options.parseCallback(res, jsIntefaceToJSON(model.uri, node));
+                        //                     });
+                        //                 } else {
+                        //                     if(options && options.parseCallback) 
+                        //                         options.parseCallback(res, jsIntefaceToJSON(model.uri, node));
+                        //                 }
+                        //             } else if(options && options.parseCallback) {
+                        //                 options.parseCallback(res, node);
+                        //             }
+                        //         });
+                        //     });
+                        // });
                     } else {
                         if(options.parseCallback) {
                             options.parseCallback(true, resp);
@@ -789,7 +811,7 @@
 
 
             // Backbone.Linked.Collection
-            // ---------------------
+            // --------------------------
 
             // LinkedCollections are Backbone collections that are
             // bound to an specific SPARQL query.
@@ -798,7 +820,7 @@
             // models to the collection, but they will grow or shrink
             // authomatically as the properties of the RDF graph are 
             // modified or new nodes are added or removed from the graph.
-            var LinkedCollection = Backbone.Linked.Collection = Backbone.Collection.extend({
+            var LinkedCollection = Backbone.Linked.Collection = Backbone.Linked.Model.extend({
 
                 constructor: function() {
                     var values, options;
@@ -814,65 +836,83 @@
                     }
 
                     options = (options||{});
+                    this.options = options;
+
+                    this.uri = options['uri'] || nextAnonModelURI();
 
                     // Sets the container if passed as an argument
                     this.container = options['container'];
 
-                    // Variable name used to identify the variable
-                    // matching the nodes belonging to this collection.
-                    this.uri = options['uri'] || nextAnonModelURI();
-                    this.cid = "collection:"+nextAnonModelURI().split("#")[1];
-
-                    cleanGenerator(this);
-                    // Setup the right query
-                    this.query = generatorToQuery.call(this,this.generator);
-
-                    // We're pushing data into the store, not receiving an update from the store
-                    this.rdfPushed = false;
-
                     // can the collection be updated?
                     this.isReadWrite = (typeof(this.generator) !== 'string');
 
-                    // A model object that will maintain the triples for this collection/container resource
-                    this.graph = setupGraphModel(this);
+                    cleanGenerator(this);
+
+                    // Setup the right query
+                    this.query = generatorToQuery.call(this,this.generator);
+
+
+                    // Build the Model for the LinkedCollection
+                    options['uri'] = this.uri;
+                    Backbone.Linked.Model.apply(this,[setupGraphModel(this)]);
+
+                    var collection = this;
 
                     this.queryCallback = function(nodes) {
                         var models = _.map(nodes, function(node) {
-                            var uri = node[that.idVariable].value;
-                            return new that.model(uri);
+                            var uri = node[collection.idVariable].value;
+                            return new collection.model(uri);
                         });
 
-                        that.rdfPushed = true;
-                        that.set(models, {merge:false});
-                        that.rdfPushed = false;
+                        collection.rdfPushed = true;
+                        collection.set(models, {merge:false});
+                        collection.rdfPushed = false;
                     }
 
-                    var collection = this;
-                    this.graph.on('change', function(model) {
-                        // URI will change if we craete the collection
-                        collection.uri = model.uri;
+                    // Listen to my own changes
+                    this.on('change', function(model) {
                         if(model.has('ldp:MembershipSubject')) {
                             collection.generator.subject = model.get('ldp:MembershipSubject');
                             collection.generator.predicate = model.get('ldp:MembershipPredicate');
-                            collection.generator.object = model.get('ldp:Membershipject');
+                            collection.generator.object = model.get('ldp:MembershipObject');
 
                             var newQuery = generatorToQuery(collection, collection.generator);
                             if(newQuery !== collection.generator) {
                                 collection.query = newQuery;
-                                RDFStorage.stopObservingQuery(collection.cid);
-                                RDFStorage.startObservingQuery(collection.cid, collection.query, collection.options, collection.queryCallback);
+                                _triggerQueryCallback(collection);
                             }
                         }
                     });
-                    // this.graph.on('sync', function(model,resp,options) {
-                    //     collection.trigger('sync', collection, resp, options);
-                    // });
 
-                    var that = this;
+                    //Backbone.Collection.apply(this,[values,options]);
+                    // Simulate now the Collection initialization
+                    if (options.model) this.model = options.model;
+                    if (options.comparator !== void 0) this.comparator = options.comparator;
+                    this._reset();
+                    if (values) this.reset(values, _.extend({silent: true}, options));
 
-                    Backbone.Collection.apply(this,[values,options]);
-
+                    // Collection checking looking for models belonging to this collection
                     RDFStorage.startObservingQuery(this.cid, this.query, options, this.queryCallback);
+                },
+
+                // Overwrite get based on the arguments to decide if we must invoke the
+                // Collection or the Model operation
+                get: function(arg) {
+                    if(arg == null || typeof(arg) === 'object')
+                        return Backbone.Collection.prototype.get.call(this,arg)
+                    else 
+                        return LinkedModel.prototype.get.call(this,arg);
+                },
+
+                // Overwrite set based on the arguments to decide if we must invoke the
+                // Collection or the Model operation
+                set: function() {
+                    var args = Array.prototype.slice.call(arguments);
+                    if(args[0].constructor === Array) {
+                        return Backbone.Collection.prototype.set.apply(this,args)
+                    } else {
+                        return LinkedModel.prototype.set.apply(this,args);
+                    }
                 },
 
                 // Add a model, or list of models to the set.
@@ -894,9 +934,9 @@
                     
                     if(this.generator.subject === "<>" || this.generator.subject == this.uri) {
                         predicate = this.generator.predicate;
-                        oldValue = collection.graph.get(predicate);
+                        oldValue = this.get(predicate);
                         if(oldValue == null) {
-                            collection.graph.set(predicate,_.map(models, function(model){ return uriProp(model.uri); }));
+                            this.set(predicate,_.map(models, function(model){ return uriProp(model.uri); }));
                         } else if(oldValue.constructor === Array) {
                             // There's already an array of values, look for new models to append
                             var toAdd = oldValue;
@@ -906,7 +946,7 @@
                                    toAdd.push(uriProp(model.uri));
                             });
                             if(toAdd.length !== origLength)
-                                collection.graph.set(predicate,toAdd);
+                                this.set(predicate,toAdd);
                         } else {
                             // Single value, look for URIs in the models to append
                             var toAdd = [oldValue];
@@ -916,7 +956,7 @@
                                 }
                             });
                             if(toAdd.length !== 1) 
-                                collection.graph.set(predicate,toAdd);
+                                this.set(predicate,toAdd);
                         }
                     } else if(this.generator.subject === RDFStorage.namespaces.safeResolve('ldp:MemberSubject')) {
                         predicate = this.generator.predicate;
@@ -994,7 +1034,6 @@
                 // in order to mutate the model after
                 // invoking the Backbone.Model version of the create function
                 create: function(model, options) {
-                    if(model.prototype === LinkedCollection) model = model.graph;
                     var oldSuccess = options.success;
                     options.success = function(model, resp, options) {
                         var newModelUri = options.xhr.getResponseHeader("Location");
@@ -1011,10 +1050,12 @@
                     var clientSuccess = options.success;
                     var collection = this;
                     options.success = function(resp) {
+                        _triggerQueryCallback(collection);
                         collection.trigger('sync', collection, resp, options);
                         if(clientSuccess) clientSuccess(resp);
                     };
-                    this.graph.fetch(options);
+                    if(options.reset) RDFStorage.deleteNodesProperties(this.uri, this.attributes);
+                    LinkedModel.prototype.fetch.call(this,options);
                 },
 
                 destroy: function() { },
@@ -1045,6 +1086,18 @@
                     }
                 },
 
+                // Prepare a hash of attributes (or other model) to be added to this
+                // collection.
+                _prepareModel: function(attrs, options) {
+                    // @todo return collections here if conditions are met
+                    if (attrs instanceof Backbone.Model) return attrs;
+                    options = options ? _.clone(options) : {};
+                    options.collection = this;
+                    var model = new this.model(attrs, options);
+                    if (!model.validationError) return model;
+                    this.trigger('invalid', this, model.validationError, options);
+                    return false;
+                },
 
                 // Internal method called every time a model in the set fires an event.
                 _onModelEvent: function(event, model, collection, options) {
@@ -1096,11 +1149,22 @@
                 
             });
 
+            // Mixing Backbone.Collection methods
+            _.each(_.keys(Backbone.Collection.prototype), function(p) {
+                if(LinkedCollection.prototype[p] === undefined) {
+                    LinkedCollection.prototype[p] = Backbone.Collection.prototype[p];
+                }
+            });
             // Mixin RDFStorage listener methods
             RDFStorage.mixinListerMethods(LinkedCollection.prototype);
-
+            
 
             // Private helper functions for LinkedCollections
+
+            var _triggerQueryCallback = function(collection) {
+                RDFStorage.stopObservingQuery(collection.cid);
+                RDFStorage.startObservingQuery(collection.cid, collection.query, collection.options, collection.queryCallback);
+            };
 
             var wrapError = function(model, options) {
                 var error = options.error;
@@ -1155,31 +1219,28 @@
                             attributes['ldp:membershipPredicate'] = uriProp(RDFStorage.namespaces.safeResolve(collection.generator.predicate));
                             attributes['ldp:membershipObject'] = uriProp(RDFStorage.namespaces.safeResolve('ldp:MemberSubject'));
 
-                            return new LinkedModel(attributes);
+                            return attributes;
                         } else {
                             attributes['ldp:membershipSubject'] = uriProp(RDFStorage.namespaces.safeResolve(collection.generator.subject));
                             attributes['ldp:membershipPredicate'] = uriProp(RDFStorage.namespaces.safeResolve(collection.generator.predicate));
                             attributes['ldp:membershipObject'] = uriProp(RDFStorage.namespaces.safeResolve(collection.generator.object));
 
-                            return new LinkedModel(attributes);
+                            return attributes;
                         }
                     
-                        return new LinkedModel(attributes);
+                        return attributes;
                     } else {
 
                         // The container is already a remote resource.
                         // Let's set the URI and use the regular 'fetch' method to retrieve
                         // the RDF representation
-                        var model = new LinkedModel({'@id':collection.uri})
-                        //model.fetch();
-                        return model;
-
+                        return {'@id':collection.uri}
                     }
                 } else {
                     // Plain collection not a container.
                     var attributes = {'@id': collection.uri,
                                       'rdf:type': uriProp(RDFStorage.namespaces.safeResolve('lbb:DataView'))};
-                    return new LinkedModel(attributes);
+                    return attributes;
                 }
             };
 

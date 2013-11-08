@@ -10,7 +10,6 @@
         }
     });
 
-/*
     asyncTest("Should be able to fetch ane existing LDPResource", function() {
         var xdir = new Backbone.Linked.Collection({uri:'https://localhost:8443/2013/XDir/'});
         xdir.fetch({
@@ -32,13 +31,32 @@
             }
         });
     });
-*/
+
 
     asyncTest("Should be possible to create nested collections", function() {
-        var root = new Backbone.Linked.Collection({uri:'https://localhost:8443/2013/'});
+        var GenericContainer = Backbone.Linked.Collection.extend({
+            generator: {
+                subject: '<>',
+                predicate: 'ldp:created',
+                object: 'ldp:MemberSubject'
+            }
+        });
+
+        var root = new GenericContainer({uri: 'https://localhost:8443/2013/'});
         root.fetch({
             success: function(container) {
-                debugger;
+                equal(container.models.length, container.get('ldp:created').length);
+
+                container.create({'rdf:type': '@id:ldp:Container',
+                                  'ldp:Membershipsubject': '<>',
+                                  'ldp:MembershipPredicate': '@id:rdf:member',
+                                  'ldp:MembershipObject': '@id:ldp:MemberSubject'}, {
+                                      success: function(resp) {
+                                          console.log("YES");
+                                          start();
+                                      }
+                                  })
+                                  
                 start();
             }
         });
