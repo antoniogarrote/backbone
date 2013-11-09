@@ -178,6 +178,7 @@ Test.prototype = {
         console.log("ERROR Setting up test");
         console.log(e.message);
         console.log(e);
+        debugger;
 			QUnit.pushFailure( "Setup failed on " + this.testName + ": " + ( e.message || e ), extractStacktrace( e, 1 ) );
 		}
 	},

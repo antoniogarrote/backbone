@@ -400,23 +400,28 @@
                 // a N3 representation from the attributes;
                 var graph = RDFStore.rdf.createGraph();
                 var subject = RDFStore.rdf.createNamedNode(uri);
-                var triple, object;
+                var triple, object, nsProperty;
                 _.each(_.keys(attributes),function(property){
                     if(property === '@id')
                         return;
                     object = attributes[property];
+                    if(property.indexOf(":") === -1)
+                        nsProperty = ":"+property;
+                    else
+                        nsProperty = property;
+                    if(object === "@id:<>") object = uri;
                     if(object.constructor === Array) {
                         _.each(modelAttributeValueToN3(object), function(object) {
                             graph.add(RDFStore.rdf.createTriple(
                                 subject,
-                                RDFStore.rdf.createNamedNode(property),
+                                RDFStore.rdf.createNamedNode(nsProperty),
                                 object
                             ));
                         });
                     } else {
                         graph.add(RDFStore.rdf.createTriple(
                             subject,
-                            RDFStore.rdf.createNamedNode(property),
+                            RDFStore.rdf.createNamedNode(nsProperty),
                             modelAttributeValueToN3(object)
                         ));
                     }
@@ -449,8 +454,11 @@
                         data['@id'] = this.uri;
 
                         // Look into the cache for instances of this object;
-                        if(LinkedModel.cache.fetch(this.uri))
-                            return LinkedModel.cache.fetch(this.uri);
+                        if(LinkedModel.cache.fetch(this.uri)) {
+                            var fromCache = LinkedModel.cache.fetch(this.uri);
+                            if(options.merge) fromCache.set(data);
+                            return fromCache;
+                        }
 
                         // We're pushing data into the store, not receiving an update from the store
                         this.rdfPushed = false;
@@ -504,11 +512,11 @@
 
                         if(mustSet) {
                             that.rdfPushed = true;
-                            that.set(toSetAttrs);
+                            that.set(toSetAttrs,{silent: true});
                         }
                         if(mustUnset) {
                             that.rdfPushed = true;
-                            that.unset(toUnsetAttrs);
+                            that.unset(toUnsetAttrs,{silent: true});
                         }
 
                         // triggers the rdf:initialized event
@@ -576,10 +584,16 @@
                         return acc;
                     }, {});
 
+                    // Used for original set implementation to work correctly
+                    var oldAttrs = attrs;
+
                     // Only update the store if we're pushing the data
                     // from the model to the store and not
                     // and not updating after a store notification.
                     if(this.rdfPushed === false) {
+
+                        // save snapshot of attrs for original set implementation.
+                        oldAttrs = _.clone(this.attributes);
 
                         if((options||{}).unset === true) {
                             // Performing RDF graph update.
@@ -590,6 +604,14 @@
                         }
                     }
 
+                    // Hack. If the modification is not done by RDF push,
+                    // we have updated the RDF in the previous check.
+                    // but now the attributes have been synched by the
+                    // node listener and they are exactly the same we are
+                    // going to set => no changed events will happen.
+                    // Replace the value of the attributes before
+                    // invoking the original set, so events will be triggered.
+                    this.attributes = oldAttrs;
                     // Invoking original 'set' Backbone.Model.
                     Backbone.Model.prototype.set.apply(this,[attrs,options]);
 
@@ -600,10 +622,12 @@
                 // Updates the representation of the node in the store.
                 modify: function() {
                     var attrs = arguments[0] || this.attributes;
-                    if(this.initialized === true) 
-                        RDFStorage.modifyNode(this.uri, attrs);
-                    else
+                    if(this.initialized === true) {
+                        if(!_.isEqual(attrs, this.attributes))
+                            RDFStorage.modifyNode(this.uri, attrs);
+                    } else {
                         RDFStorage.writeNodesProperties(this.uri, attrs);
+                    }
                 },
 
                 // Removes the representation of the node from the store
@@ -770,13 +794,13 @@
                     return RDFStore.rdf.createNamedNode(value);
                 } else if(typeof(value) === 'object' && value.type === 'literal') {
                     return RDFStore.rdf.createLiteral(value.value, null, value.type);
+                } else if(value === true) {
+                        return RDFStore.rdf.createLiteral(true, null, "http://www.w3.org/2001/XMLSchema#boolean");
+                } else if(value === false) {
+                        return RDFStore.rdf.createLiteral(false, null, "http://www.w3.org/2001/XMLSchema#boolean");                    
                 } else if(typeof(value) === 'number') {
                     if(isInt(value)) {
                         return RDFStore.rdf.createLiteral(value, null, "http://www.w3.org/2001/XMLSchema#integer");
-                    } else if(value === true) {
-                        return RDFStore.rdf.createLiteral(true, null, "http://www.w3.org/2001/XMLSchema#boolean");
-                    } else if(value === false) {
-                        return RDFStore.rdf.createLiteral(false, null, "http://www.w3.org/2001/XMLSchema#boolean");
                     } else {
                         return RDFStore.rdf.createLiteral(value, null, "http://www.w3.org/2001/XMLSchema#float");
                     }
@@ -898,9 +922,9 @@
                 // Overwrite get based on the arguments to decide if we must invoke the
                 // Collection or the Model operation
                 get: function(arg) {
-                    if(arg == null || typeof(arg) === 'object')
+                    if(arg == null || typeof(arg) === 'object' || Backbone.Collection.prototype.get.call(this,arg))
                         return Backbone.Collection.prototype.get.call(this,arg)
-                    else 
+                    else
                         return LinkedModel.prototype.get.call(this,arg);
                 },
 
@@ -926,7 +950,7 @@
 
                     var collection = this;
                     models = _.map(models, function(model) {
-                        return collection._prepareModel(model);
+                        return collection._prepareModel(model,options);
                     });
 
                     var subject,predicate,object,oldValue;
@@ -1004,7 +1028,7 @@
                     });
                     models = _.compact(models);
                     var predicate = this.generator.predicate;
-                    if(this.generator.subject == null) {
+                    if(this.generator.subject === "<>" || this.generator.subject === this.uri) {
                         var nodeToRemove = {};
                         var objectsToRemove = _.map(models, function(model) {
                             return uriProp(model.uri);
