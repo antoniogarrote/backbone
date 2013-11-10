@@ -925,8 +925,10 @@
 
                     this.ignoreQueryCallbacks = false;
                     this.queryCallback = function(nodes) {
-                        if(collection.ignoreQueryCallbacks === true) return;
                         debug("** COLLECTION CALLBACK ["+collection.cid+"] "+nodes.length);
+                        // we can ignore because the model callback will pick the changes;
+                        if(collection.ignoreQueryCallbacks === true){ console.log("*** IGNORING"); return; }
+                        debug("* NOT IGNORING");
                         var models = _.map(nodes, function(node) {
                             var uri = node[collection.idVariable].value;
                             return new collection.model(uri);
@@ -935,6 +937,7 @@
                         collection.rdfPushed = true;
                         collection.set(models, {merge:false});
                         collection.rdfPushed = false;
+
                     }
 
                     // Listen to my own changes
@@ -979,10 +982,101 @@
                     var args = Array.prototype.slice.call(arguments);
                     if(args[0].constructor === Array) {
                         debugger;
-                        return Backbone.Collection.prototype.set.apply(this,args)
+                        return this.collectionSet.apply(this,args)
                     } else {
                         return LinkedModel.prototype.set.apply(this,args);
                     }
+                },
+
+                // Update a collection by `set`-ing a new list of models, adding new ones,
+                // removing models that are no longer present, and merging models that
+                // already exist in the collection, as necessary. Similar to **Model#set**,
+                // the core operation for updating the data contained by the collection.
+                collectionSet: function(models, options) {
+                    var setOptions = {add: true, remove: true, merge: true};
+                    options = _.defaults({}, options, setOptions);
+                    if (options.parse) models = this.parse(models, options);
+                    var singular = !_.isArray(models);
+                    models = singular ? (models ? [models] : []) : _.clone(models);
+                    var i, l, id, model, attrs, existing, sort;
+                    var at = options.at;
+                    var targetModel = this.model;
+                    var sortable = this.comparator && (at == null) && options.sort !== false;
+                    var sortAttr = _.isString(this.comparator) ? this.comparator : null;
+                    var toAdd = [], toRemove = [], modelMap = {};
+                    var add = options.add, merge = options.merge, remove = options.remove;
+                    var order = !sortable && add && remove ? [] : false;
+
+                    // Turn bare objects into model references, and prevent invalid models
+                    // from being added.
+                    for (i = 0, l = models.length; i < l; i++) {
+                        attrs = models[i] || {};
+                        if (attrs instanceof Backbone.Model) {
+                            id = model = attrs;
+                        } else {
+                            id = attrs[targetModel.prototype.idAttribute];
+                        }
+
+                        // If a duplicate is found, prevent it from being added and
+                        // optionally merge it into the existing model.
+                        if (existing = this.get(id)) {
+                            if (remove) modelMap[existing.cid] = true;
+                            if (merge) {
+                                attrs = attrs === model ? model.attributes : attrs;
+                                if (options.parse) attrs = existing.parse(attrs, options);
+                                existing.set(attrs, options);
+                                if (sortable && !sort && existing.hasChanged(sortAttr)) sort = true;
+                            }
+                            models[i] = existing;
+
+                            // If this is a new, valid model, push it to the `toAdd` list.
+                        } else if (add) {
+                            model = models[i] = this._prepareModel(attrs, options);
+                            if (!model) continue;
+                            toAdd.push(model);
+                            this._addReference(model, options);
+                        }
+                        if (order) order.push(existing || model);
+                    }
+
+                    // Remove nonexistent models if appropriate.
+                    if (remove) {
+                        for (i = 0, l = this.length; i < l; ++i) {
+                            if (!modelMap[(model = this.models[i]).cid]) toRemove.push(model);
+                        }
+                        if (toRemove.length) this.remove(toRemove, options);
+                    }
+
+                    // See if sorting is needed, update `length` and splice in new models.
+                    if (toAdd.length || (order && order.length)) {
+                        if (sortable) sort = true;
+                        this.length += toAdd.length;
+                        if (at != null) {
+                            for (i = 0, l = toAdd.length; i < l; i++) {
+                                this.models.splice(at + i, 0, toAdd[i]);
+                            }
+                        } else {
+                            if (order) this.models.length = 0;
+                            var orderedModels = order || toAdd;
+                            for (i = 0, l = orderedModels.length; i < l; i++) {
+                                this.models.push(orderedModels[i]);
+                            }
+                        }
+                    }
+
+                    // Silently sort the collection if appropriate.
+                    if (sort) this.sort({silent: true});
+
+                    // Unless silenced, it's time to fire all appropriate add/sort events.
+                    if (!options.silent) {
+                        for (i = 0, l = toAdd.length; i < l; i++) {
+                            (model = toAdd[i]).trigger('add', model, this, options);
+                        }
+                        if (sort || (order && order.length)) this.trigger('sort', this, options);
+                    }
+
+                    // Return the added (or merged) model (or models).
+                    return singular ? models[0] : models;
                 },
 
                 // Add a model, or list of models to the set.
@@ -1058,13 +1152,8 @@
 
                 // Remove a model, or a list of models from the set.
                 remove: function(models, options) {
-                    debugger;
-                    this.ignoreQueryCallbacks = true;
                     if(!this.isReadWrite) throw new Error('Trying to remove from read-only Linked.Collection, non membership triple defined in the generator.');
-                    if(this.rdfPushed) {
-                        this.rdfPushed = false;
-                        return Backbone.Collection.prototype.remove.apply(this,[models,options]);
-                    }
+                    this.ignoreQueryCallbacks = true;
 
                     var singular = !_.isArray(models);
                     models = singular ? [models] : _.clone(models);
@@ -1082,9 +1171,21 @@
                     });
                     models = _.compact(models);
 
+                    for (i = 0, l = models.length; i < l; i++) {
+                        model = models[i] = this.get(models[i]);
+                        if (!model) continue;
+                        index = this.indexOf(model);
+                        this.models.splice(index, 1);
+                        this.length--;
+                        if (!options.silent) {
+                            options.index = index;
+                            model.trigger('remove', model, this, options);
+                        }
+                    }
+
                     this._removeReference(models, options);
                     this.ignoreQueryCallbacks = false;
-                    _triggerQueryCallback(collection);
+
                     return singular ? models[0] : models;
                 },
 

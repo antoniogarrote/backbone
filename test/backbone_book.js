@@ -10,6 +10,69 @@
         }
     });
 
+    asyncTest("Basic", function() {
+        Backbone.Linked.setLogLevel('debug');
+        var Todo = Backbone.Linked.Model.extend({
+            defaults: {
+                title: '',
+                completed: false
+            }
+        });
+
+        var TodosCollection = Backbone.Linked.Collection.extend({
+            model: Todo
+        });
+
+        var myTodo0 = new Todo({title:'Read the whole book', '@id': '0'});
+
+        var todos = new TodosCollection([myTodo0]);
+
+        var myTodo1 = new Todo({title:'Read the whole book', '@id': '1'});
+
+
+        todos.add(myTodo1);
+
+
+        deepEqual(todos.get('rdfs:member'),["@id:0","@id:1"]);
+        equal(todos.length,2);
+
+        var myTodo2 = new Todo({title:'Read the whole book2', '@id': '2'});
+
+        todos.add(myTodo2);
+
+        deepEqual(todos.get('rdfs:member'),["@id:0","@id:1","@id:2"]);
+        equal(todos.length,3);
+
+        todos.remove(myTodo1);
+
+        deepEqual(todos.get('rdfs:member'),["@id:0","@id:2"]);
+        equal(todos.length,2);
+
+        todos.add([{ '@id' : '0', title: "Other title 0" }], {merge: true });
+        todos.add([{ '@id' : '2', title: "Other title 2" }]); // merge: false
+        
+        deepEqual(todos.get('rdfs:member'),["@id:0","@id:2"]);
+        equal(todos.length,2);
+        equal(todos.get('0').get('title'),"Other title 0");
+        equal(todos.get('2').get('title'),'Read the whole book2');
+
+        todos.reset([
+            { '@id':'3', title: 'Read the whole book3' }
+        ]);
+
+
+        deepEqual(todos.get('rdfs:member'),["@id:3"]);
+        equal(todos.length,1);
+        equal(todos.at(0).get('title'),"Read the whole book3");
+
+        Backbone.Linked.RDFStore.execute("SELECT ?id { ?s rdfs:member ?id }", function(success,tuples) {
+            equal(tuples.length, 1);
+            equal(tuples[0].id.value, '3');
+            start();
+        });
+    });
+
+
     asyncTest("Collections", function() {
         var Todo = Backbone.Linked.Model.extend({
             defaults: {
@@ -114,6 +177,7 @@
         equal(todos.get("rdfs:member") == undefined, true);
         equal(todos.models.length, 0);
     });
+
 
     test("Merging models when adding them to collections", function() {
         var items = new Backbone.Linked.Collection;
