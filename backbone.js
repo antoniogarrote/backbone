@@ -351,7 +351,8 @@
       // Trigger all relevant attribute changes.
       if (!silent) {
         if (changes.length) this._pending = true;
-        for (var i = 0, l = changes.length; i < l; i++) {
+        for (var i = 0, l = changes.length; i < l; i++) { 
+            //console.log("********* TRIGGERING ATTRIBUTE CHANGE => "+changes[i]);
           this.trigger('change:' + changes[i], this, current[changes[i]], options);
         }
       }
@@ -362,6 +363,7 @@
       if (!silent) {
         while (this._pending) {
           this._pending = false;
+            //console.log("**************** TRIGGERING CHANGE => "+this.uri);
           this.trigger('change', this, options);
         }
       }

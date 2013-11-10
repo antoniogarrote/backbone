@@ -22,6 +22,29 @@
             cb = args[1];
             options = args[0];
         }
+
+        var logLevels = Backbone.Linked.logLevels = {
+            debug: 0,
+            info: 1,
+            warning: 2,
+            error: 3
+        }
+        Backbone.Linked.logLevel = logLevels.info;
+        var log = function(level, msg) {
+            if((logLevels[level]||logLevels.debug) >= Backbone.Linked.logLevel) {
+                console.log("["+level+"] "+msg);
+            }
+        }
+
+        var debug = function(msg) { log('debug', msg); };
+        var info = function(msg) { log('info', msg); };
+        var warning = function(msg) { log('warning', msg); };
+        var error = function(msg) { log('error', msg); };
+
+        Backbone.Linked.setLogLevel = function(level) {
+            Backbone.Linked.logLevel = (logLevels[level] == null ? logLevels.info : logLevels[level]);
+        }
+
         rdfstore.create(function(store) {
 
             // Backbone.Linked.RDFStore
@@ -155,14 +178,19 @@
                 // Modifies a single node provided its URI and the new
                 // node N3 data using an SPARQL UPDATE DELETE/INSERT/WHERE query
                 // to update the node in the store;
-                modifyNode: function(uri, properties) {
+                modifyNode: function(node, properties) {
+                    var uri = node.uri;
                     var conditions = _.map(_.keys(properties), function(prop) {
                         return "?p = <"+prop+">";
                     }).join(" || ");
                     var n3Data = JSONToNT(uri, properties)
                     // Doing this in two queries
+                    node.ignoreNodeCallbacks = true;
                     var query =  "DELETE { <"+uri+"> ?p ?o } WHERE { <"+uri+"> ?p ?o . FILTER("+conditions+") }";
+                    info("** Modifying");
+                    info(query);
                     RDFStore.execute(query);
+                    node.ignoreNodeCallbacks = false;
                     var query =  "INSERT DATA { "+n3Data+" }";
                     RDFStore.execute(query);
                 },
@@ -192,6 +220,9 @@
                         acum.push(JSONToNT(uris[i],properties[i]));
                     }
                     var query = "DELETE DATA { "+acum.join("\n")+" }";
+                    info("DELETING:");
+                    info(query);
+                    debugger;
                     RDFStore.execute(query);
                 },
 
@@ -487,6 +518,13 @@
                     // We start observing the RDF node status
                     var that = this;
                     this.syncRDFNodeCallback = function(node) {
+                        // A callback was triggered because we're doing a
+                        // set of related RDF modifications, ignore.
+                        if(that.ignoreNodeCallbacks && _.isEqual(node,{})) return;
+
+                        debugger; 
+                        debug("** MODEL CALLBACK "+that.uri);
+                        debug("** "+JSON.stringify(node));
                         var shouldInitialize = false;
 
                         // Sets the ID to point to the URI;
@@ -518,6 +556,9 @@
                             that.rdfPushed = true;
                             that.unset(toUnsetAttrs,{silent: true});
                         }
+
+                        // Flag to prevent taking actions when updating properties
+                        this.ignoreNodeCallbacks = false;
 
                         // triggers the rdf:initialized event
                         if(shouldInitialize) 
@@ -624,7 +665,7 @@
                     var attrs = arguments[0] || this.attributes;
                     if(this.initialized === true) {
                         if(!_.isEqual(attrs, this.attributes))
-                            RDFStorage.modifyNode(this.uri, attrs);
+                            RDFStorage.modifyNode(this, attrs);
                     } else {
                         RDFStorage.writeNodesProperties(this.uri, attrs);
                     }
@@ -882,7 +923,10 @@
 
                     var collection = this;
 
+                    this.ignoreQueryCallbacks = false;
                     this.queryCallback = function(nodes) {
+                        if(collection.ignoreQueryCallbacks === true) return;
+                        debug("** COLLECTION CALLBACK ["+collection.cid+"] "+nodes.length);
                         var models = _.map(nodes, function(node) {
                             var uri = node[collection.idVariable].value;
                             return new collection.model(uri);
@@ -895,6 +939,7 @@
 
                     // Listen to my own changes
                     this.on('change', function(model) {
+                        debug("** CHANGE MODEL CALLBACK: "+model.uri);
                         if(model.has('ldp:MembershipSubject')) {
                             collection.generator.subject = model.get('ldp:MembershipSubject');
                             collection.generator.predicate = model.get('ldp:MembershipPredicate');
@@ -933,6 +978,7 @@
                 set: function() {
                     var args = Array.prototype.slice.call(arguments);
                     if(args[0].constructor === Array) {
+                        debugger;
                         return Backbone.Collection.prototype.set.apply(this,args)
                     } else {
                         return LinkedModel.prototype.set.apply(this,args);
@@ -943,8 +989,10 @@
                 // In our implementation, just add the membership
                 // triple to the models if no present.
                 add: function(models, options) {
+                    debugger;
                     if(!this.isReadWrite) throw new Error('Trying to insert in read-only Linked.Collection, non membership triple defined in the generator.');
-
+                    // ESTO PUEDE HABER NO FUNCIONADO PORQUE ADD LLAMA RESET!!! ==> HAZ UNA PILA!!!
+                    this.ignoreQueryCallbacks = true;
                     var singular = !_.isArray(models);
                     models = singular ? (models ? [models] : []) : _.clone(models);
 
@@ -955,7 +1003,8 @@
 
                     var subject,predicate,object,oldValue;
                     
-                    
+
+
                     if(this.generator.subject === "<>" || this.generator.subject == this.uri) {
                         predicate = this.generator.predicate;
                         oldValue = this.get(predicate);
@@ -1003,15 +1052,20 @@
                             } // else -> already present.
                         });
                     }
+                    this.ignoreQueryCallbacks = false;
+                    _triggerQueryCallback(collection);                   
                 },
 
                 // Remove a model, or a list of models from the set.
                 remove: function(models, options) {
+                    debugger;
+                    this.ignoreQueryCallbacks = true;
+                    if(!this.isReadWrite) throw new Error('Trying to remove from read-only Linked.Collection, non membership triple defined in the generator.');
                     if(this.rdfPushed) {
                         this.rdfPushed = false;
                         return Backbone.Collection.prototype.remove.apply(this,[models,options]);
                     }
-                    if(!this.isReadWrite) throw new Error('Trying to remove from read-only Linked.Collection, non membership triple defined in the generator.');
+
                     var singular = !_.isArray(models);
                     models = singular ? [models] : _.clone(models);
                     options || (options = {});
@@ -1027,6 +1081,18 @@
                         return collection.get(model);
                     });
                     models = _.compact(models);
+
+                    this._removeReference(models, options);
+                    this.ignoreQueryCallbacks = false;
+                    _triggerQueryCallback(collection);
+                    return singular ? models[0] : models;
+                },
+
+                // Internal method to sever a model's ties to a collection.
+                _removeReference: function(models, options) {
+                    var singular = !_.isArray(models);
+                    models = singular ? (models ? [models] : []) : _.clone(models);
+
                     var predicate = this.generator.predicate;
                     if(this.generator.subject === "<>" || this.generator.subject === this.uri) {
                         var nodeToRemove = {};
@@ -1049,7 +1115,28 @@
                         var urisToRemove = _.map(models, function(model){ return model.uri });
                         RDFStorage.deleteNodesProperties(urisToRemove, nodesToRemove);
                     }
-                    return singular ? models[0] : models;
+
+                    var that = this;
+                    _.map(models, function(model) {
+                        delete that._byId[model.id];
+                        delete that._byId[model.cid];
+                        if (that === model.collection) delete model.collection;
+                        model.off('all', that._onModelEvent, that);
+                    });
+                },
+
+                reset: function(models, options) {
+                    options || (options = {});
+                    this.ignoreQueryCallbacks = true;
+                    this._removeReference(this.models, options);
+                    options.previousModels = this.models;
+                    this._reset();
+                    this.ignoreQueryCallbacks = false;
+
+                    models = this.add(models, _.extend({silent: true}, options));
+
+                    if (!options.silent) this.trigger('reset', this, options);
+                    return models;
                 },
 
                 // Container methods

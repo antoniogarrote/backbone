@@ -61,6 +61,8 @@
 
 
     test("Adding and Removing Models", function() {
+        Backbone.Linked.setLogLevel('debug');
+        debugger;
         var Todo = Backbone.Linked.Model.extend({
             defaults: {
                 title: '',
@@ -76,26 +78,30 @@
         b = new Todo({ title: 'Go to China.'}),
         c = new Todo({ title: 'Go to Disneyland.'});
 
+        debugger;
         var todos = new TodosCollection([a,b]);
         console.log("Collection size: " + todos.length);
         // Logs: Collection size: 2
         equal(todos.length, 2);
+        debugger;
 
         todos.add(c);
         console.log("Collection size: " + todos.length);
         // Logs: Collection size: 3
         equal(todos.length, 3);
+        debugger;
 
         todos.remove([a,b]);
         console.log("Collection size: " + todos.length);
         // Logs: Collection size: 1
         equal(todos.length, 1);
+        debugger;
 
         todos.remove(c);
         console.log("Collection size: " + todos.length);
         // Logs: Collection size: 0        
         equal(todos.length, 0);
-
+        debugger;
         ///////////////////////////
         // Linked Data extensions
         ///////////////////////////
@@ -213,7 +219,7 @@
         ]);
 
         var myTodo = TodosCollection.get('3');
-        debugger;
+
         myTodo.set('titled', 'go fishing');
         // Logs: Changed my mind! I should go fishing
         equal(messages[0],"Changed my mind! I should go fishing");
@@ -223,8 +229,10 @@
 
     });
 
-
     test("Refreshing a collection", function() {
+
+        //Backbone.Linked.setLogLevel('debug');
+
         var TodosCollection = new Backbone.Linked.Collection();
 
         TodosCollection.add([
@@ -273,4 +281,32 @@
         equal(log.completed, "Completed go to Jamaica.");
     });
 
+    test("Collection reset", function() {
+        debugger;
+        var TodosCollection = new Backbone.Linked.Collection();
+
+        // we can listen for reset events
+        TodosCollection.on("reset", function() {
+            console.log("Collection reset.");
+        });
+
+        TodosCollection.add([
+            { title: 'go to Jamaica.', completed: false },
+            { title: 'go to China.', completed: false },
+            { title: 'go to Disneyland.', completed: true }
+        ]);
+
+        console.log('Collection size: ' + TodosCollection.length); // Collection size: 3
+        equal(TodosCollection.length, 3);
+
+        TodosCollection.reset([
+            { title: 'go to Cuba.', completed: false }
+        ]);
+        // Above logs 'Collection reset.'
+
+        console.log('Collection size: ' + TodosCollection.length); // Collection size: 1
+        equal(TodosCollection.length, 1);
+    });
+
+    
 })();
