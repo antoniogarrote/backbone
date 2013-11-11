@@ -55,7 +55,7 @@
     });
 
     test("Should fire the right events when models are added, removed or have their properties changed.", function() {
-
+        Backbone.Linked.setLogLevel('debug');
         var users = new this.UsersCollection();
         var changes = {
             added: [],
@@ -64,23 +64,22 @@
         }
 
         users.on('add', function(user) {
-            //console.log("** ADDED "+user.uri);
+            console.log("** ADDED "+user.uri);
             changes.added.push(user.get('foaf:name'));
         });
 
         users.on('remove', function(user) {
-            //console.log("** REMOVED "+user.uri);
+            console.log("** REMOVED "+user.uri);
             changes.removed.push(user.get('foaf:name'));
         });
 
         users.on('change',function(user) {
-            //console.log("** CHANGED "+user.uri);
+            console.log("** CHANGED "+user.uri);
             changes.changed.push(user.get('foaf:name'));
         });
 
         Backbone.Linked.RDFStore.execute("INSERT DATA { ex:helena foaf:name 'Helena'; a ex:User }");
         Backbone.Linked.RDFStore.execute("DELETE DATA { ex:caterina a ex:User }");
-
         // This should not trigger a change since we have removed it
         // from the collection.
         var cate = new this.User('ex:caterina');

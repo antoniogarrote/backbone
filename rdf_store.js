@@ -29505,6 +29505,8 @@ Callbacks.CallbacksBackend.prototype.dispatchQueries = function(callback) {
                 toDispatchMap[queryId] = true;
                 query = that.queriesMap[queryId];
                 queryCallback = that.queriesCallbacksMap[queryId];
+                // callbacks can be destroyed in query callbacks
+                if(query != null && queryCallback !== null) {
                 Utils.recur(function(){
                     that.engine.execute(query,
                         function(success, results){
@@ -29516,6 +29518,11 @@ Callbacks.CallbacksBackend.prototype.dispatchQueries = function(callback) {
                             k(floop,env);
                         });
                 });
+                } else {
+                    delete that.queriesMap[queryId];
+                    delete that.queriesCallbacksMap[queryId];
+                    k(floop, env);
+                }
             } else {
                 k(floop,env);
             }

@@ -33,6 +33,13 @@
         todos.add(myTodo1);
 
 
+        Backbone.Linked.RDFStore.execute("SELECT ?s ?o { ?s rdfs:member ?o }", function(s, results) {
+            console.log(_.map(results, function(tuple) {
+                return JSON.stringify([tuple.s.value, tuple.o.value]); 
+            }));
+        });
+
+
         deepEqual(todos.get('rdfs:member'),["@id:0","@id:1"]);
         equal(todos.length,2);
 
@@ -125,7 +132,6 @@
 
     test("Adding and Removing Models", function() {
         Backbone.Linked.setLogLevel('debug');
-        debugger;
         var Todo = Backbone.Linked.Model.extend({
             defaults: {
                 title: '',
@@ -141,30 +147,26 @@
         b = new Todo({ title: 'Go to China.'}),
         c = new Todo({ title: 'Go to Disneyland.'});
 
-        debugger;
         var todos = new TodosCollection([a,b]);
         console.log("Collection size: " + todos.length);
         // Logs: Collection size: 2
         equal(todos.length, 2);
-        debugger;
 
         todos.add(c);
         console.log("Collection size: " + todos.length);
         // Logs: Collection size: 3
         equal(todos.length, 3);
-        debugger;
 
         todos.remove([a,b]);
         console.log("Collection size: " + todos.length);
         // Logs: Collection size: 1
         equal(todos.length, 1);
-        debugger;
 
         todos.remove(c);
         console.log("Collection size: " + todos.length);
         // Logs: Collection size: 0        
         equal(todos.length, 0);
-        debugger;
+
         ///////////////////////////
         // Linked Data extensions
         ///////////////////////////
@@ -346,7 +348,6 @@
     });
 
     test("Collection reset", function() {
-        debugger;
         var TodosCollection = new Backbone.Linked.Collection();
 
         // we can listen for reset events

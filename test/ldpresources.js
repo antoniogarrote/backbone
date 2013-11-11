@@ -42,6 +42,7 @@
             }
         });
 
+        var out = this;
         var root = new GenericContainer({uri: 'https://localhost:8443/2013/'});
         root.fetch({
             success: function(container) {
@@ -53,7 +54,7 @@
                                   'ldp:MembershipObject': '@id:ldp:MemberSubject'}, {
                                       success: function(resp) {
                                           console.log("YES");
-                                          start();
+                                          out.start();
                                       }
                                   })
                                   

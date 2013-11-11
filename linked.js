@@ -222,7 +222,6 @@
                     var query = "DELETE DATA { "+acum.join("\n")+" }";
                     info("DELETING:");
                     info(query);
-                    debugger;
                     RDFStore.execute(query);
                 },
 
@@ -522,8 +521,8 @@
                         // set of related RDF modifications, ignore.
                         if(that.ignoreNodeCallbacks && _.isEqual(node,{})) return;
 
-                        debugger; 
                         debug("** MODEL CALLBACK "+that.uri);
+
                         debug("** "+JSON.stringify(node));
                         var shouldInitialize = false;
 
@@ -608,6 +607,7 @@
                 // the RDFStore.
                 // @todo: deal with options
                 set: function(key,val,options) {
+                    var setOptions = {add: true, remove: true, merge: true};
                     var attrs, rdfAttrs, allprops, that = this;
                     if (key == null) return this;
 
@@ -618,7 +618,7 @@
                     } else {
                         (attrs = {})[key] = val;
                     }
-
+                    options = _.defaults({}, options, setOptions);
 
                     attrs = _.reduce(_.keys(attrs), function(acc,prop) {
                         acc[RDFStorage.namespaces.safeResolve(prop)] = attrs[prop];
@@ -627,6 +627,8 @@
 
                     // Used for original set implementation to work correctly
                     var oldAttrs = attrs;
+                    if(options.unset === true) 
+                        oldAttrs = _.clone(this.attributes);
 
                     // Only update the store if we're pushing the data
                     // from the model to the store and not
@@ -923,6 +925,21 @@
 
                     var collection = this;
 
+                    if(!this.isReadWrite) {
+                        info("*** Redefining destructive functions");
+                        // Reset the destructive functions if it is readonly
+                        this._readOnlySet = false;
+                        _.each(['add','remove','set','reset'], function(f) {
+                            collection[f] = function() {
+                                if(this._readOnlySet === false)
+                                    throw new Error('Trying to modify in read-only Linked.Collection, non membership triple defined in the generator.');                                
+                                else
+                                    return this['___'+f].apply(this,arguments);
+                            };
+                            collection['___'+f] = Backbone.Collection.prototype[f];
+                        });
+                    }
+
                     this.ignoreQueryCallbacks = false;
                     this.queryCallback = function(nodes) {
                         debug("** COLLECTION CALLBACK ["+collection.cid+"] "+nodes.length);
@@ -935,7 +952,13 @@
                         });
 
                         collection.rdfPushed = true;
-                        collection.set(models, {merge:false});
+                        if(collection.isReadWrite)
+                            collection.set(models, {merge:false});
+                        else {
+                            collection._readOnlySet = true;
+                            collection['___set'](models, {merge:false});
+                            collection._readOnlySet = false;
+                        }
                         collection.rdfPushed = false;
 
                     }
@@ -981,7 +1004,6 @@
                 set: function() {
                     var args = Array.prototype.slice.call(arguments);
                     if(args[0].constructor === Array) {
-                        debugger;
                         return Backbone.Collection.prototype.set.apply(this,args)
                     } else {
                         return LinkedModel.prototype.set.apply(this,args);
@@ -992,7 +1014,6 @@
                 // In our implementation, just add the membership
                 // triple to the models if no present.
                 add: function(models, options) {
-                    debugger;
                     if(!this.isReadWrite) throw new Error('Trying to insert in read-only Linked.Collection, non membership triple defined in the generator.');
                     // ESTO PUEDE HABER NO FUNCIONADO PORQUE ADD LLAMA RESET!!! ==> HAZ UNA PILA!!!
                     this.ignoreQueryCallbacks = true;
