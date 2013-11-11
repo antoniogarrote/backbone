@@ -83,10 +83,10 @@ var todos = new TodosCollection([myTodo0]);
 // Adding to the collection
 todos.add(myTodo1);
 
-Backbone.Linked.RDFStore.execute("SELECT ?s ?o { ?s rdfs:member ?o }, function(s, results) {
+Backbone.Linked.RDFStore.execute("SELECT ?s ?o { ?s rdfs:member ?o }", function(s, results) {
   // Output:
   /*
-     ["["http://linked.backbone.org/models/anon#1","0"]", "["http://linked.backbone.org/models/anon#1","1"]"] 
+     [['http://linked.backbone.org/models/anon#1","0"]", "["http://linked.backbone.org/models/anon#1","1"]"] 
   */
   console.log(_.map(results, function(tuple) {
     return JSON.stringify([tuple.s.value, tuple.o.value]);  
