@@ -47,7 +47,7 @@ Initialization:
 ```javascript
 Backbone.Linked.bootstrap(function(){
   // Registering the default namespace.
-  Backbone.Linked.registerNamespaces({book: "http://addyosmani.github.io/backbone-fundamentals/"})
+  Backbone.Linked.registerNamespaces({ex: "http://test.com/vocab#"})
 
   // Aplication logic here.
 });
@@ -85,7 +85,9 @@ todos.add(myTodo1);
 
 Backbone.Linked.RDFStore.execute("SELECT ?s ?o { ?s rdfs:member ?o }, function(s, results) {
   // Output:
-  // ["["http://linked.backbone.org/models/anon#1","0"]", "["http://linked.backbone.org/models/anon#1","1"]"] 
+  /*
+     ["["http://linked.backbone.org/models/anon#1","0"]", "["http://linked.backbone.org/models/anon#1","1"]"] 
+  */
   console.log(_.map(results, function(tuple) {
     return JSON.stringify([tuple.s.value, tuple.o.value]);  
   }));
