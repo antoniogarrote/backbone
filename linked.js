@@ -474,6 +474,11 @@
                 constructor: function(data, options) {
                     options = options || {};
                     data = data || {};
+                    var defaults = _.result(this, 'defaults') || {};
+                    this.defaults = _.reduce(_.keys(defaults), function(acc,prop) {
+                        acc[RDFStorage.namespaces.safeResolve(prop)] = defaults[prop];
+                        return acc;
+                    },{});
 
                     // By default the data will not be initialized until state
                     // is read from the RDF store

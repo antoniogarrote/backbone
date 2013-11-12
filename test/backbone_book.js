@@ -10,6 +10,168 @@
         }
     });
 
+    //
+    // MODELS
+    //
+
+    test("Model initialization", function() {
+        var Todo = Backbone.Linked.Model.extend({});
+
+        // We can then create our own concrete instance of a (Todo) model
+        // with no values at all:
+        var todo1 = new Todo();
+
+        ///////////////////////////
+        // Linked Data extensions
+        ///////////////////////////
+        // A self-generated URI will be assigned to the new model instance
+        // if no URI is provided
+
+        equal(JSON.stringify(todo1),'{"@id":"http://linked.backbone.org/models/anon#1"}');
+
+        // or with some arbitrary data:
+        var todo2 = new Todo({
+            title: 'Check the attributes of both model instances in the console.',
+            completed: true,
+            '@id': 'http://somewhere.intheinterwebs.com/me'
+        });
+
+
+        ///////////////////////////
+        // Linked Data extensions
+        ///////////////////////////
+        // If a URI is provided using the '@id' property, it will be used to identify the model instance.
+
+        equal(JSON.stringify(todo2),'{"title":"Check the attributes of both model instances in the console.","completed":true,"@id":"http://somewhere.intheinterwebs.com/me"}');
+    });
+
+    test("Model initializers", function() {
+        var now = new Date();
+        var Todo = Backbone.Linked.Model.extend({
+            initialize: function(){
+                this.builtAt = now;
+            }
+        });
+
+        var myTodo = new Todo();
+
+        equal(myTodo.builtAt, now);
+    });
+
+    test("Default values", function() {
+        var Todo = Backbone.Linked.Model.extend({
+            // Default todo attribute values
+            defaults: {
+                title: '',
+                completed: false
+            }
+        });
+
+        // Now we can create our concrete instance of the model
+        // with default values as follows:
+        var todo1 = new Todo();
+
+        equal(todo1.get('title'),'');
+        equal(todo1.get('completed'),false);
+
+        // Or we could instantiate it with some of the attributes (e.g., with custom title):
+        var todo2 = new Todo({
+            title: 'Check attributes of the logged models in the console.'
+        });
+
+        equal(todo2.get('title'),'Check attributes of the logged models in the console.');
+        equal(todo2.get('completed'),false);
+
+
+        // Or override all of the default attributes:
+        var todo3 = new Todo({
+            title: 'This todo is done, so take no action on this one.',
+            completed: true
+        });
+
+        equal(todo3.get('title'),'This todo is done, so take no action on this one.');
+        equal(todo3.get('completed'),true);
+    });
+
+    
+    test("Getters", function() {
+
+        ///////////////////////////
+        // Linked Data extensions
+        ///////////////////////////
+        // Properties for Linked.Models are URIs. they can be
+        // specified as CURIEs or full URIS.
+        // If just a plain string is passed for the property,
+        // it will transformed into a URI using the default namespace.
+
+        var Todo = Backbone.Linked.Model.extend({
+            // Default todo attribute values
+            defaults: {
+                'foaf:title': '',
+                completed: false
+            }
+        });
+        
+        var todo1 = new Todo();
+        equal(todo1.get('foaf:title'),''); // empty string
+        equal(todo1.get('completed'),false); // false
+
+        var todo2 = new Todo({
+            'http://xmlns.com/foaf/0.1/title': "Retrieved with model's get() method.",
+            completed: true
+        });
+
+        ///////////////////////////
+        // Linked Data extensions
+        ///////////////////////////
+        // Properties can be retrived and set using CURIEs. The library
+        // will perform the resolution of that CURIE into a full URI.
+        // Properties are always stored into the Model instance attributes
+        // map using full URIs
+
+        equal(todo2.get('foaf:title'),'Retrieved with model\'s get() method.'); // Retrieved with model's get() method.
+        equal(todo2.get('http://xmlns.com/foaf/0.1/title'),'Retrieved with model\'s get() method.'); // Retrieved with model's get() method.
+        equal(todo2.get('completed'),true); // true
+    });
+
+    test("Setters", function() {
+        var Todo = Backbone.Linked.Model.extend({
+            // Default todo attribute values
+            defaults: {
+                title: '',
+                completed: false
+            }
+        });
+
+        // Setting the value of attributes via instantiation
+        var myTodo = new Todo({
+            title: "Set through instantiation."
+        });
+
+        equal(myTodo.get('title'),'Set through instantiation.');
+        equal(myTodo.get('completed'),false);
+
+
+        // Set single attribute value at a time through Model.set():
+        myTodo.set("title", "Title attribute set through Model.set().");
+        equal(myTodo.get('title'),'Title attribute set through Model.set().');
+
+        // Set map of attributes through Model.set():
+        myTodo.set({
+            title: "Both attributes set through Model.set().",
+            completed: true
+        });
+
+        equal(myTodo.get('title'),'Both attributes set through Model.set().');
+        equal(myTodo.get('completed'),true);
+    });
+
+
+/*
+    //
+    // COLLECTIONS
+    //
+
     asyncTest("Basic", function() {
         Backbone.Linked.setLogLevel('debug');
         var Todo = Backbone.Linked.Model.extend({
@@ -435,6 +597,6 @@
         deepEqual(changes.added, ['Pete']);
         deepEqual(changes.removed, ['Ringo']);
     });
+*/
 
-    
 })();
