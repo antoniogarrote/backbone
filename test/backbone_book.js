@@ -373,5 +373,68 @@
         equal(TodosCollection.length, 1);
     });
 
+
+    test("Reset events", function() {
+        var Todo = new Backbone.Linked.Model();
+        var Todos = new Backbone.Linked.Collection([Todo])
+            .on('reset', function(Todos, options) {
+                equal(options.previousModels.length, 1);
+                equal(options.previousModels[0],Todo); // true
+            })
+            .on('add', function() {
+                ok(false,"add events should not be fired when resetting the collection");
+            })
+            .on('remove', function() {
+                ok(false,"remove events should not be fired whe resetting the collection");
+            });
+
+        Todos.reset([]);        
+    });
+
+
+    test("Intelligent set in collections", function() {
+        // Define a model of type 'Beatle' with a 'job' attribute
+        var Beatle = Backbone.Linked.Model.extend({
+            defaults: {
+                job: 'musician'
+            }
+        });
+
+        // Create models for each member of the Beatles
+        var John = new Beatle({ firstName: 'John', lastName: 'Lennon'});
+        var Paul = new Beatle({ firstName: 'Paul', lastName: 'McCartney'});
+        var George = new Beatle({ firstName: 'George', lastName: 'Harrison'});
+        var Ringo = new Beatle({ firstName: 'Ringo', lastName: 'Starr'});
+
+        var changes = {
+            added: [],
+            removed: []
+        };
+
+        // Create a collection using our models
+        var theBeatles = new Backbone.Linked.Collection([John, Paul, George, Ringo])
+            .on('add', function(beatle) {
+                changes.added.push(beatle.get('firstName'));
+            })
+            .on('remove', function(beatle) {
+                changes.removed.push(beatle.get('firstName'));
+            });
+
+        // Create a separate model for Pete Best
+        var Pete = new Beatle({ firstName: 'Pete', lastName: 'Best'});
+
+        // Update the collection
+        Paul.set('age', 71);
+        theBeatles.set([John, Paul, George, Pete]);
+
+        deepEqual(theBeatles.map(function(beatle) { return beatle.get('firstName') }).sort(), ["George", "John", "Paul", "Pete"]);
+        deepEqual(theBeatles.map(function(beatle) { return beatle.get('lastName') }).sort(), ["Best", "Harrison", "Lennon", "McCartney"]);
+        deepEqual(Ringo.collection, undefined);
+        deepEqual(theBeatles.find(function(beatle){ return beatle.get('firstName') === 'Paul' }).get('age'), 71);
+
+        deepEqual(changes.added, ['Pete']);
+        deepEqual(changes.removed, ['Ringo']);
+    });
+
     
 })();

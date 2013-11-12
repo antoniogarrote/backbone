@@ -473,13 +473,13 @@
 
                 constructor: function(data, options) {
                     options = options || {};
+                    data = data || {};
 
                     // By default the data will not be initialized until state
                     // is read from the RDF store
                     this.initialized = false;
 
                     if(typeof(data) === 'object') {
-
                         this.uri = data['@id'] || nextAnonModelURI();
                         data['@id'] = this.uri;
 
