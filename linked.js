@@ -488,6 +488,7 @@
                         this.uri = data['@id'] || nextAnonModelURI();
                         data['@id'] = this.uri;
 
+
                         // Look into the cache for instances of this object;
                         if(LinkedModel.cache.fetch(this.uri)) {
                             var fromCache = LinkedModel.cache.fetch(this.uri);
@@ -630,6 +631,9 @@
                         return acc;
                     }, {});
 
+                    // Run validation, we cannot wait for the original implementation.
+                    if (!this._validate(attrs, options)) return false;
+
                     // Used for original set implementation to work correctly
                     var oldAttrs = attrs;
                     if(options.unset === true) 
@@ -645,7 +649,7 @@
 
                         if((options||{}).unset === true) {
                             // Performing RDF graph update.
-                            this.removePropertiesFromNode(that.uri, attrs);
+                            RDFStorage.removePropertiesFromNode(that.uri, attrs);
                         } else {
                             // Performing RDF graph update.
                             this.modify(attrs);
@@ -797,6 +801,11 @@
                     else
                         subject = this.uri;
                     return JSONToNT(subject, this.attributes);
+                },
+
+                // Adding methods to retrieve properties using CURIEs
+                rdfGet: function(self, prop) {
+                    return self[RDFStorage.namespaces.safeResolve(prop)];
                 }
             });
 
@@ -1488,7 +1497,7 @@
 
             // Finishing
             // ---------
-
+            
             // Registering the LDP prefix
             RDFStorage.namespaces.register("ldp","http://www.w3.org/ns/ldp#");
             RDFStorage.namespaces.register("lbb","http://linked.backbone.org/vocab#");

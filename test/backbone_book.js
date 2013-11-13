@@ -167,7 +167,186 @@
     });
 
 
-/*
+    test("Direct access", function() {
+        var changes = [];
+
+        var Person = new Backbone.Linked.Model();
+        Person.on("change:name", function() { changes.push('name changed') });
+        Person.set({name: 'Andrew'});
+        
+        // new change
+        deepEqual(changes, ['name changed']);
+
+        Person.set({name: 'Jeremy'}, {silent: true});
+
+        // no change
+        deepEqual(changes, ['name changed']);
+
+
+        ok(Person.hasChanged("name"));
+        // true: change was recorded
+
+        ok(Person.hasChanged(null));
+        // true: something (anything) has changed
+    });
+
+    test("Listeners in constructor", function() {
+        var changes = [];
+
+        var Todo = Backbone.Linked.Model.extend({
+            // Default todo attribute values
+            defaults: {
+                title: '',
+                completed: false
+            },
+            initialize: function(){
+                changes.push("INITIALIZED");
+                this.on('change', function(){
+                    changes.push("CHANGE");
+                });
+            }
+        });
+
+        var myTodo = new Todo();
+
+        myTodo.set('title', 'The listener is triggered whenever an attribute value changes.');
+        changes.push("SET TITLE");
+
+
+        myTodo.set('completed', true);
+        changes.push("SET COMPLETED");
+        console.log('Completed has changed: ' + myTodo.get('completed'));
+
+        myTodo.set({
+            title: 'Changing more than one attribute at the same time only triggers the listener once.',
+            completed: true
+        });
+        changes.push("SET MULTIPLE");
+
+        deepEqual(changes,
+                  ["INITIALIZED", 
+                   "CHANGE", 
+                   "SET TITLE", 
+                   "CHANGE", 
+                   "SET COMPLETED", 
+                   "CHANGE", 
+                   "SET MULTIPLE"])
+
+        // Above logs:
+        // This model has been initialized.
+        // - Values for this model have changed.
+        // Title has changed: The listener is triggered whenever an attribute value changes.
+        // - Values for this model have changed.
+        // Completed has changed: true
+        // - Values for this model have changed.
+    });
+
+    test("Individual properties listeners", function() {
+        var changes = [];
+
+        var Todo = Backbone.Linked.Model.extend({
+            // Default todo attribute values
+            defaults: {
+                'foaf:title': '',
+                completed: false
+            },
+
+            initialize: function(){
+                changes.push('INITIALIZED');
+
+                ///////////////////////////
+                // Linked Data extensions
+                ///////////////////////////
+                // In order to listen for changes in RDF properties
+                // the event name 'change' plus the curie or
+                // the full URI of the property can be used
+                this.on('change:foaf:title', function(){
+                    changes.push('TITLE_CHANGE');
+                });
+            },
+
+            setTitle: function(newTitle){
+                this.set({ 'foaf:title': newTitle });
+            }
+        });
+
+        var myTodo = new Todo();
+
+        // Both of the following changes trigger the listener:
+        myTodo.set('foaf:title', 'Check what\'s logged.');
+        myTodo.setTitle('Go fishing on Sunday.');
+
+        // But, this change type is not observed, so no listener is triggered:
+        myTodo.set('completed', true);
+        equal(myTodo.get('completed'), true);
+
+        // Above logs:
+        // This model has been initialized.
+        // Title value for this model has changed.
+        // Title value for this model has changed.
+        deepEqual(changes,['INITIALIZED','TITLE_CHANGE','TITLE_CHANGE']);
+    });
+
+    test("Validations", function() {
+        var Person = new Backbone.Linked.Model({'foaf:name': 'Jeremy'});
+
+        // Validate the model name
+        Person.validate = function(attrs) {
+            ///////////////////////////
+            // Linked Data extensions
+            ///////////////////////////
+            // All Linked.Model objects have a rdfGet
+            // function that allow them to look for properties
+            // in objects using CURIEs that will be expanded 
+            // into full URIs.
+            if (!Person.rdfGet(attrs, 'foaf:name')) {
+                return 'I need your name';
+            }
+        };
+
+        // Change the name
+        Person.set({'foaf:name': 'Samuel'});
+        equal(Person.get('foaf:name'),'Samuel');
+        // 'Samuel'
+
+        // Remove the name attribute, force validation
+
+        success = Person.unset('foaf:name', {validate: true});
+
+        ok(!success);
+        equal(Person.get('foaf:name'),'Samuel');
+        equal(Person.validationError,"I need your name");
+    });
+
+    test("Validation events", function() {
+        var errors = [];
+
+        var Todo = Backbone.Linked.Model.extend({
+            defaults: {
+                completed: false
+            },
+
+            validate: function(attributes){
+                if(attributes.title === undefined){
+                    return "Remember to set a title for your todo.";
+                }
+            },
+
+            initialize: function(){
+                console.log('This model has been initialized.');
+                this.on("invalid", function(model, error){
+                    errors.push(error);
+                });
+            }
+        });
+
+        var myTodo = new Todo();
+        myTodo.set('completed', true, {validate: true}); // logs: Remember to set a title for your todo.
+        equal(myTodo.get('completed'),false);
+        deepEqual(errors, ['Remember to set a title for your todo.']);
+    });
+
+
     //
     // COLLECTIONS
     //
@@ -597,6 +776,5 @@
         deepEqual(changes.added, ['Pete']);
         deepEqual(changes.removed, ['Ringo']);
     });
-*/
 
 })();
