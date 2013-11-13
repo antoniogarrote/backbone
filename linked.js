@@ -526,7 +526,7 @@
                     // We start observing the RDF node status
                     var that = this;
                     this.syncRDFNodeCallback = function(node) {
-                        debugger;
+
                         // A callback was triggered because we're doing a
                         // set of related RDF modifications, ignore.
                         if(that.ignoreNodeCallbacks && _.isEqual(node,{})) return;
@@ -1533,7 +1533,11 @@
             // ---------
 
             // Adding custom RDF utility functions to underscore
-            
+            _.rdf = {
+                resolve: RDFStorage.namespaces.safeResolve,
+                id: function(uri) { return "@id:"+this.resolve(uri); },
+                idToUri: function(id) { if(isPropUri(id)) { return propUri(id) } else { return id } }
+            }
             
             // Registering the LDP prefix
             RDFStorage.namespaces.register("ldp","http://www.w3.org/ns/ldp#");

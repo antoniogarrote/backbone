@@ -378,7 +378,7 @@
             }));
         });
 
-        deepEqual(todos.get('rdfs:member',{resolve: false}),["@id:0","@id:1"]);
+        deepEqual(todos.get('rdfs:member',{resolve: false}),[_.rdf.id("0"),_.rdf.id("1")]);
         var models = _.map(todos.get('rdfs:member'),function(model){ return model.uri; });
         deepEqual(models,["0","1"]);
         equal(todos.length,2);
