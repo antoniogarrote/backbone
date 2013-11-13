@@ -346,7 +346,6 @@
         deepEqual(errors, ['Remember to set a title for your todo.']);
     });
 
-
     //
     // COLLECTIONS
     //
@@ -367,7 +366,6 @@
         var myTodo0 = new Todo({title:'Read the whole book', '@id': '0'});
 
         var todos = new TodosCollection([myTodo0]);
-
         var myTodo1 = new Todo({title:'Read the whole book', '@id': '1'});
 
 
@@ -380,26 +378,27 @@
             }));
         });
 
-
-        deepEqual(todos.get('rdfs:member'),["@id:0","@id:1"]);
+        deepEqual(todos.get('rdfs:member',{resolve: false}),["@id:0","@id:1"]);
+        var models = _.map(todos.get('rdfs:member'),function(model){ return model.uri; });
+        deepEqual(models,["0","1"]);
         equal(todos.length,2);
 
         var myTodo2 = new Todo({title:'Read the whole book2', '@id': '2'});
 
         todos.add(myTodo2);
 
-        deepEqual(todos.get('rdfs:member'),["@id:0","@id:1","@id:2"]);
+        deepEqual(todos.get('rdfs:member',{resolve: false}),["@id:0","@id:1","@id:2"]);
         equal(todos.length,3);
 
         todos.remove(myTodo1);
 
-        deepEqual(todos.get('rdfs:member'),["@id:0","@id:2"]);
+        deepEqual(todos.get('rdfs:member',{resolve: false}),["@id:0","@id:2"]);
         equal(todos.length,2);
 
         todos.add([{ '@id' : '0', title: "Other title 0" }], {merge: true });
         todos.add([{ '@id' : '2', title: "Other title 2" }]); // merge: false
         
-        deepEqual(todos.get('rdfs:member'),["@id:0","@id:2"]);
+        deepEqual(todos.get('rdfs:member',{resolve: false}),["@id:0","@id:2"]);
         equal(todos.length,2);
         equal(todos.get('0').get('title'),"Other title 0");
         equal(todos.get('2').get('title'),'Read the whole book2');
@@ -409,7 +408,7 @@
         ]);
 
 
-        deepEqual(todos.get('rdfs:member'),["@id:3"]);
+        deepEqual(todos.get('rdfs:member',{resolve: false}),["@id:3"]);
         equal(todos.length,1);
         equal(todos.at(0).get('title'),"Read the whole book3");
 
@@ -419,7 +418,6 @@
             start();
         });
     });
-
 
     asyncTest("Collections", function() {
         var Todo = Backbone.Linked.Model.extend({

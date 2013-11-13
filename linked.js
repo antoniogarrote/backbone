@@ -338,7 +338,10 @@
             };
 
             var propUri = function(value) {
-                return RDFStorage.namespaces.safeResolve(value.split('@id:')[1]);
+                if(value.indexOf("@id:") === 0)
+                    return RDFStorage.namespaces.safeResolve(value.split('@id:')[1]);
+                else
+                    return value;
             };
             
             var isPropUri = function(value) {
@@ -523,6 +526,7 @@
                     // We start observing the RDF node status
                     var that = this;
                     this.syncRDFNodeCallback = function(node) {
+                        debugger;
                         // A callback was triggered because we're doing a
                         // set of related RDF modifications, ignore.
                         if(that.ignoreNodeCallbacks && _.isEqual(node,{})) return;
@@ -603,9 +607,34 @@
 
                 // Wrap Backbone.Model implementation normalizing the
                 // property name.
-                get: function(property) {
+                get: function(property,options) {
+                    options = (options || {})
+                    options.resolve = (options.resolve == null ? true :  options.resolve)
+                    options.collection = (options.collection == null ? false : options.collection)
                     property = RDFStorage.namespaces.safeResolve(property);
-                    return Backbone.Model.prototype.get.call(this,property);
+                    var objects = Backbone.Model.prototype.get.call(this,property);
+                    if(objects == null) return objects;
+                    if(options.collection === true && objects.constructor !== Array) {
+                        objects = [objects];
+                    }
+                    if(objects.constructor === Array) {
+                        if(options.resolve === true) {
+                            return _.map(objects,function(object) {
+                                if(isPropUri(object)) {
+                                    return new LinkedModel(propUri(object));
+                                } else {
+                                    return object
+                                }
+                            });
+                        } else 
+                            return objects;
+                    } else {
+                        if(isPropUri(objects) && options.resolve === true) {
+                            return new LinkedModel(propUri(objects));
+                        } else {
+                            return objects;
+                        }
+                    }
                 },
 
                 // Wrap Backbone.Model implementation, normalizing the
@@ -839,7 +868,9 @@
                 if(value === null) {
                     return RDFStore.rdf.createNamedNode(RDF_NULL);
                 } else if(value === undefined) {
-
+                } else if(value.uri != null) {
+                    // passing a Linked.Model or Linked.Collection object
+                    return modelAttributeValueToN3(uriProp(value.uri));
                 } else if(value.constructor === Array) {
                     return _.map(value,function(value) {
                         return modelAttributeValueToN3(value);
@@ -980,13 +1011,14 @@
                     // Listen to my own changes
                     this.on('change', function(model) {
                         debug("** CHANGE MODEL CALLBACK: "+model.uri);
-                        if(model.has('ldp:MembershipSubject')) {
-                            collection.generator.subject = model.get('ldp:MembershipSubject');
-                            collection.generator.predicate = model.get('ldp:MembershipPredicate');
-                            collection.generator.object = model.get('ldp:MembershipObject');
+                        if(model.has('ldp:membershipSubject')) {
 
-                            var newQuery = generatorToQuery(collection, collection.generator);
-                            if(newQuery !== collection.generator) {
+                            collection.generator.subject = propUri(model.get('ldp:membershipSubject',{resolve: false}));
+                            collection.generator.predicate = propUri(model.get('ldp:membershipPredicate',{resolve: false}));
+                            collection.generator.object = propUri(model.get('ldp:membershipObject',{resolve: false}));
+
+                            var newQuery = generatorToQuery.call(collection, collection.generator);
+                            if(newQuery !== collection.query) {
                                 collection.query = newQuery;
                                 _triggerQueryCallback(collection);
                             }
@@ -1006,11 +1038,11 @@
 
                 // Overwrite get based on the arguments to decide if we must invoke the
                 // Collection or the Model operation
-                get: function(arg) {
+                get: function(arg,options) {
                     if(arg == null || typeof(arg) === 'object' || Backbone.Collection.prototype.get.call(this,arg))
                         return Backbone.Collection.prototype.get.call(this,arg)
                     else
-                        return LinkedModel.prototype.get.call(this,arg);
+                        return LinkedModel.prototype.get.call(this,arg,options);
                 },
 
                 // Overwrite set based on the arguments to decide if we must invoke the
@@ -1045,7 +1077,7 @@
 
                     if(this.generator.subject === "<>" || this.generator.subject == this.uri) {
                         predicate = this.generator.predicate;
-                        oldValue = this.get(predicate);
+                        oldValue = this.get(predicate,{resolve: false});
                         if(oldValue == null) {
                             this.set(predicate,_.map(models, function(model){ return uriProp(model.uri); }));
                         } else if(oldValue.constructor === Array) {
@@ -1078,7 +1110,7 @@
                         }
 
                         _.each(models, function(model) {
-                            oldValue = model.get(predicate);
+                            oldValue = model.get(predicate,{resolve:false});
                             if(oldValue == null) {
                                 model.set(predicate, object);
                             } else if(oldValue.constructor === Array && !_.contains(oldValue, object)) {
@@ -1345,10 +1377,12 @@
                 if(typeof(generator) === 'string') {
                     return generator;
                 } else {
-
-                    var query = "", collection = this;;
+                    // Properties can be strings specified by the user of prop URIs coming from
+                    // a callback.
+                    var query = "", collection = this;
                     var bgp = _.map(['subject','predicate','object'], function(p) {
                         var val = generator[p];
+
                         if(val === "<>") {
                             return "<"+collection.uri+">";
                         } else if(val === RDFStorage.namespaces.safeResolve('ldp:MemberSubject')) {
@@ -1497,6 +1531,9 @@
 
             // Finishing
             // ---------
+
+            // Adding custom RDF utility functions to underscore
+            
             
             // Registering the LDP prefix
             RDFStorage.namespaces.register("ldp","http://www.w3.org/ns/ldp#");
