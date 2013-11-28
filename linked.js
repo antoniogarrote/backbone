@@ -442,7 +442,7 @@
                         nsProperty = ":"+property;
                     else
                         nsProperty = property;
-                    if(object === "@id:<>") object = uri;
+                    if(object === "@id:<>") object = uriProp(uri);
                     if(object.constructor === Array) {
                         _.each(modelAttributeValueToN3(object), function(object) {
                             graph.add(RDFStore.rdf.createTriple(
@@ -463,6 +463,43 @@
                 return graph.toNT();
             };
 
+
+            // Builds a JSON representation of an object where all
+            // URIs have been transformed into plain strings or CURIEs.
+            var JSONToCompactJSON =  function(value) {
+                if( value == null) {
+                    return value;
+                } else if(value instanceof Array) {
+                    return _.map(value, function(elem) {
+                        return JSONToCompactJSON(elem);
+                    });
+                } else if(typeof(value) === 'string' || typeof(value) === 'number' || value.constructor === Date) {
+                    return value;
+                } else {
+                    var json = {}, newValue, newProperty, oldValue, model;
+                    if(value instanceof LinkedModel) {
+                        model = value;
+                        value = value.attributes;
+                    }
+                    _.each(_.keys(value), function(property) {
+                        if(property === '@id') {
+                            json[property] = value[property];
+                        } else {
+                            oldValue = (value[property]);
+                            if(model != null && model.generator && 
+                               model.generator.predicate && model.generator.predicate === property && 
+                               model.generator.object === "http://www.w3.org/ns/ldp#MemberSubject" ) 
+                                newValue = JSONToCompactJSON(model.get(property));
+                            else
+                                newValue = JSONToCompactJSON(value[property]);
+
+                            newProperty = _.rdf.shrink(property);
+                            json[newProperty] = newValue;
+                        }
+                    });
+                    return json;
+                }
+            };
 
 
 
@@ -594,6 +631,32 @@
 
                     RDFStorage.stopObservingNode(this.cid);
                     RDFStorage.changeNodeUri(oldUri, this.uri);
+
+                    this.attributes['@id'] = this.uri;
+
+                    if(this.generator != null) {
+                        var collection = this;
+                        var changed = false;
+                        _.each(['subject','predicate','object'], function(comp) {
+                            if(collection.generator[comp] === oldUri || collection.generator[comp] === propUri(oldUri)) {
+                                collection.generator[comp] = collection.uri;
+                                changed = true;
+                            } else if(collection.generator[comp] === "<>") {
+                                changed = true;
+                            }
+                        });
+                        if(changed) {
+                            RDFStorage.stopObservingQuery(collection.cid);
+                            this.query = generatorToQuery.call(this,this.generator);
+                            //Backbone.Linked.Model.apply(this,[setupGraphModel(this),{reset:true}]);                        
+                            _.each(['ldp:membershipSubject', 'ldp:membershipPredicate', 'ldp:membershipObject'], function(prop) {
+                                if(collection.attributes[_.rdf.resolve(prop)] === oldUri)
+                                    collection.attributes[_.rdf.resolve(prop)] = _.rdf.id(collection.uri);
+                            });
+                            RDFStorage.startObservingQuery(this.cid, this.query, this.options, this.queryCallback);
+                        }
+                    }
+                    
                     RDFStorage.startObservingNode(this.cid, this.uri,this.syncRDFNodeCallback);
 
                     LinkedModel.cache[this.uri] = this;
@@ -832,6 +895,10 @@
                     return JSONToNT(subject, this.attributes);
                 },
 
+                toCompactJSON: function() {
+                    return JSONToCompactJSON(this);
+                },
+
                 // Adding methods to retrieve properties using CURIEs
                 rdfGet: function(self, prop) {
                     return self[RDFStorage.namespaces.safeResolve(prop)];
@@ -862,6 +929,11 @@
             var nextAnonModelURI = function() {
                 anonModelCounter++;
                 return anonURIPrefix+anonModelCounter;
+            };
+
+            var nextAnonModelID = function() {
+                anonModelCounter++;
+                return anonModelCounter;
             };
             
             var modelAttributeValueToN3 = function(value) {
@@ -1060,13 +1132,11 @@
                 // In our implementation, just add the membership
                 // triple to the models if no present.
                 add: function(models, options) {
+                    var collection = this;
                     if(!this.isReadWrite) throw new Error('Trying to insert in read-only Linked.Collection, non membership triple defined in the generator.');
-                    // ESTO PUEDE HABER NO FUNCIONADO PORQUE ADD LLAMA RESET!!! ==> HAZ UNA PILA!!!
                     this.ignoreQueryCallbacks = true;
                     var singular = !_.isArray(models);
                     models = singular ? (models ? [models] : []) : _.clone(models);
-
-                    var collection = this;
                     models = _.map(models, function(model) {
                         return collection._prepareModel(model,options);
                     });
@@ -1264,8 +1334,8 @@
                     if(this.isNew()) {
                         if(this.container) {
                             return this.container;
-                        } else if(this.collection && this.collection.container) {
-                            return this.collection.container;
+                        } else if(this.collection && this.collection.url()) {
+                            return this.collection.url();
                         } else {
                             return null;
                         }
@@ -1325,7 +1395,7 @@
                             attributes['ldp:membershipObject'] = uriProp(RDFStorage.namespaces.safeResolve('ldp:MemberSubject'));
                         }
                         var modelsMembershipObjects = _.map(this.models, function(model) {
-                            return model.uri;
+                            return _.rdf.uri(model.uri);
                         });
                         attributes[this.generator.predicate] = modelsMembershipObjects;
 
@@ -1333,6 +1403,10 @@
                     } else {
 
                     }
+                },
+
+                toCompactJSON: function() {
+                    return JSONToCompactJSON(this);
                 }
                 
             });
@@ -1348,6 +1422,16 @@
             
 
             // Private helper functions for LinkedCollections
+
+            var _generateChildModelUniqueURI = function(collection) {
+                var childUri = collection.uri;
+                if(!baseUri.match(/(#|\/)$/))
+                    childUri += "/";
+                childUri += (new Date()).getTime();
+                childUri += nextAnonModelID();
+
+                return childUri;
+            };
 
             var _triggerQueryCallback = function(collection) {
                 RDFStorage.stopObservingQuery(collection.cid);
@@ -1525,6 +1609,7 @@
 
             // Private helper function for LDPResource
             var urlError = function() {
+                debugger;
                 throw new Error('A model with "uri" or "url" property or function must be specified');
             };
 
@@ -1536,7 +1621,10 @@
             _.rdf = {
                 resolve: RDFStorage.namespaces.safeResolve,
                 id: function(uri) { return "@id:"+this.resolve(uri); },
-                idToUri: function(id) { if(isPropUri(id)) { return propUri(id) } else { return id } }
+                uri: function(uri) { return "@id:"+this.resolve(uri); }, 
+                isId: function(value) { return isPropUri(value); },
+                idToUri: function(id) { if(isPropUri(id)) { return propUri(id) } else { return id } },
+                shrink: function(uri) { return RDFStorage.namespaces.shrink(uri) }
             }
             
             // Registering the LDP prefix

@@ -54,43 +54,26 @@
         });
     });
 
-    test("Should fire the right events when models are added, removed or have their properties changed.", function() {
-        Backbone.Linked.setLogLevel('debug');
-        var users = new this.UsersCollection();
-        var changes = {
-            added: [],
-            removed: [],
-            changed: [],
-        }
-
-        users.on('add', function(user) {
-            console.log("** ADDED "+user.uri);
-            changes.added.push(user.get('foaf:name'));
+    test("Should provide a compact JSON representation of a collection", function() {
+        var GenericContainer = Backbone.Linked.Collection.extend({
+            generator: {
+                subject: '<>',
+                predicate: 'ldp:created',
+                object: 'ldp:MemberSubject'
+            }
         });
 
-        users.on('remove', function(user) {
-            console.log("** REMOVED "+user.uri);
-            changes.removed.push(user.get('foaf:name'));
+        var users = new GenericContainer();
+        users.add([
+            {'foaf:name': 'Caterina'},
+            {'foaf:name': 'Helena'}
+        ]);
+        var compact = users.toCompactJSON();
+        equal(compact['ldp:membershipPredicate'],"@id:http://www.w3.org/ns/ldp#created");
+        equal(compact['ldp:created'].length,2);
+        _.each(compact['ldp:created'], function(created) {
+            ok(created['foaf:name'] != null);
         });
-
-        users.on('change',function(user) {
-            console.log("** CHANGED "+user.uri);
-            changes.changed.push(user.get('foaf:name'));
-        });
-
-        Backbone.Linked.RDFStore.execute("INSERT DATA { ex:helena foaf:name 'Helena'; a ex:User }");
-        Backbone.Linked.RDFStore.execute("DELETE DATA { ex:caterina a ex:User }");
-        // This should not trigger a change since we have removed it
-        // from the collection.
-        var cate = new this.User('ex:caterina');
-        cate.set('foaf:name',"Cate");
-
-        var ana = new this.User('ex:ana');
-        ana.set('foaf:name',"Ana");
-
-        deepEqual(changes.added,['Helena']);
-        deepEqual(changes.removed,['Caterina']);
-        deepEqual(changes.changed,['Ana']);
     });
 
     test("Should be able to populate a read-write collection", function() {

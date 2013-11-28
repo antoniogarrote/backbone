@@ -23,6 +23,15 @@
         }
     });
 
+    test("Should provide a compact JSON representation of a model", function() {
+        var cate = new this.User({"foaf:name":"Caterina",
+                                  "foaf:account":"cate.cova@service.com"});
+        var compact = cate.toCompactJSON();
+        equal(compact['foaf:name'], 'Caterina');
+        equal(compact['foaf:account'], 'cate.cova@service.com');
+        ok(compact['@id'] != null);
+    });
+
     asyncTest("Should be able to craete a new Model object with new RDF data.", function() {
         expect(5);
         var cate = new this.User({"foaf:name":"Caterina",
