@@ -5,10 +5,10 @@
   var lastRoute = null;
   var lastArgs = [];
 
-  function onRoute(router, route, args) {
+  var onRoute = function(router, route, args) {
     lastRoute = route;
     lastArgs = args;
-  }
+  };
 
   var Location = function(href) {
     this.replace(href);
@@ -16,8 +16,11 @@
 
   _.extend(Location.prototype, {
 
+    parser: document.createElement('a'),
+
     replace: function(href) {
-      _.extend(this, _.pick($('<a></a>', {href: href})[0],
+      this.parser.href = href;
+      _.extend(this, _.pick(this.parser,
         'href',
         'hash',
         'host',
@@ -684,7 +687,7 @@
       }
     });
     location.replace('http://example.com/root/path');
-    Backbone.history.start({pushState: true, root: 'root'});
+    Backbone.history.start({pushState: true, hashChange: false, root: 'root'});
     Backbone.history.navigate('');
   });
 
@@ -699,7 +702,7 @@
       }
     });
     location.replace('http://example.com/path');
-    Backbone.history.start({pushState: true});
+    Backbone.history.start({pushState: true, hashChange: false});
     Backbone.history.navigate('');
   });
 
@@ -722,7 +725,7 @@
     var router = new Router;
 
     location.replace('http://example.com/');
-    Backbone.history.start({pushState: true});
+    Backbone.history.start({pushState: true, hashChange: false});
     Backbone.history.navigate('path?query#hash', true);
   });
 

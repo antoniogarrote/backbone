@@ -6,14 +6,31 @@
 //     For all details and documentation:
 //     http://backbonejs.org
 
-(function(){
+(function(root, factory) {
+
+  // Set up Backbone appropriately for the environment. Start with AMD.
+  if (typeof define === 'function' && define.amd) {
+    define(['underscore', 'jquery', 'exports'], function(_, $, exports) {
+      // Export global even in AMD case in case this script is loaded with
+      // others that may still expect a global Backbone.
+      root.Backbone = factory(root, exports, _, $);
+    });
+
+  // Next for Node.js or CommonJS. jQuery may not be needed as a module.
+  } else if (typeof exports !== 'undefined') {
+    var _ = require('underscore'), $;
+    try { $ = require('jquery'); } catch(e) {};
+    factory(root, exports, _, $);
+
+  // Finally, as a browser global.
+  } else {
+    root.Backbone = factory(root, {}, root._, (root.jQuery || root.Zepto || root.ender || root.$));
+  }
+
+}(this, function(root, Backbone, _, $) {
 
   // Initial Setup
   // -------------
-
-  // Save a reference to the global object (`window` in the browser, `exports`
-  // on the server).
-  var root = this;
 
   // Save the previous value of the `Backbone` variable, so that it can be
   // restored later on, if `noConflict` is used.
@@ -25,25 +42,12 @@
   var slice = array.slice;
   var splice = array.splice;
 
-  // The top-level namespace. All public Backbone classes and modules will
-  // be attached to this. Exported for both the browser and the server.
-  var Backbone;
-  if (typeof exports !== 'undefined') {
-    Backbone = exports;
-  } else {
-    Backbone = root.Backbone = {};
-  }
-
   // Current version of the library. Keep in sync with `package.json`.
   Backbone.VERSION = '1.1.0';
 
-  // Require Underscore, if we're on the server, and it's not already present.
-  var _ = root._;
-  if (!_ && (typeof require !== 'undefined')) _ = require('underscore');
-
   // For Backbone's purposes, jQuery, Zepto, Ender, or My Library (kidding) owns
   // the `$` variable.
-  Backbone.$ = root.jQuery || root.Zepto || root.ender || root.$;
+  Backbone.$ = $;
 
   // Runs Backbone.js in *noConflict* mode, returning the `Backbone` variable
   // to its previous owner. Returns a reference to this Backbone object.
@@ -109,7 +113,7 @@
       var retain, ev, events, names, i, l, j, k;
       if (!this._events || !eventsApi(this, 'off', name, [callback, context])) return this;
       if (!name && !callback && !context) {
-        this._events = {};
+        this._events = void 0;
         return this;
       }
       names = name ? [name] : _.keys(this._events);
@@ -362,6 +366,7 @@
       if (changing) return this;
       if (!silent) {
         while (this._pending) {
+          options = this._pending;
           this._pending = false;
             //console.log("**************** TRIGGERING CHANGE => "+this.uri);
           this.trigger('change', this, options);
@@ -548,7 +553,7 @@
 
     // A model is new if it has never been saved to the server, and lacks an id.
     isNew: function() {
-      return this.id == null;
+      return !this.has(this.idAttribute);
     },
 
     // Check if the model is currently in a valid state.
@@ -680,7 +685,7 @@
         if (attrs instanceof Model) {
           id = model = attrs;
         } else {
-          id = attrs[targetModel.prototype.idAttribute];
+          id = attrs[targetModel.prototype.idAttribute || 'id'];
         }
 
         // If a duplicate is found, prevent it from being added and
@@ -793,7 +798,7 @@
     // Get a model from the set by id.
     get: function(obj) {
       if (obj == null) return void 0;
-      return this._byId[obj.id] || this._byId[obj.cid] || this._byId[obj];
+      return this._byId[obj] || this._byId[obj.id] || this._byId[obj.cid];
     },
 
     // Get the model at the given index.
@@ -869,7 +874,7 @@
       if (!options.wait) this.add(model, options);
       var collection = this;
       var success = options.success;
-      options.success = function(model, resp, options) {
+      options.success = function(model, resp) {
         if (options.wait) collection.add(model, options);
         if (success) success(model, resp, options);
       };
@@ -1580,4 +1585,6 @@
     };
   };
 
-}).call(this);
+  return Backbone;
+
+}));
