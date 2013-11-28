@@ -23,6 +23,17 @@
         }
     });
 
+    asyncTest("Should update automatically objects when new properties for the object URI are added", function(){
+        var henry = new this.User({"@id": "http://bblfish.net/people/henry/card#me"});
+
+        equal(henry.get('foaf:name'),undefined);
+
+        Backbone.Linked.RDFStore.execute("INSERT DATA { <http://bblfish.net/people/henry/card#me> foaf:name 'Henry J. Story' }");
+
+        equal(henry.get('foaf:name'),"Henry J. Story");
+        start();
+    });
+/*
     test("Should provide a compact JSON representation of a model", function() {
         var cate = new this.User({"foaf:name":"Caterina",
                                   "foaf:account":"cate.cova@service.com"});
@@ -74,6 +85,6 @@
 
         ana.set('foaf:name', 'Anita');
     });
-
+*/
 
 })();

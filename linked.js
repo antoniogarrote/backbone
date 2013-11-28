@@ -829,9 +829,9 @@
                         resp = resp.replace(/<>/g,"<"+this.uri+">");
                         var model = this;
                         // @todo: check parser for media type
-                        //RDFStore.setBatchLoadEvents(true);
+                        RDFStore.setBatchLoadEvents(true);
                         RDFStore.load("text/n3", resp, function(success, results) {
-                            //RDFStore.setBatchLoadEvents(false);
+                            RDFStore.setBatchLoadEvents(false);
                             RDFStore.node(model.uri, function(res, node){
                                 if(options && options.parseCallback) 
                                     options.parseCallback(res, jsIntefaceToJSON(model.uri, node));
@@ -1600,6 +1600,9 @@
                     }
 
                     // Make the request, allowing the user to override any Ajax options.
+                    params.headers = {
+                        'Accept' : 'text/turtle'
+                    };
                     var xhr = options.xhr = Backbone.ajax(_.extend(params, options));
                     model.trigger('request', model, xhr, options);
                     return xhr;
