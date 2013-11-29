@@ -483,7 +483,7 @@
                     }
                     _.each(_.keys(value), function(property) {
                         if(property === '@id') {
-                            json[property] = value[property];
+                            json['id'] = value[property];
                         } else {
                             oldValue = (value[property]);
                             if(model != null && model.generator && 
@@ -494,7 +494,7 @@
                                 newValue = JSONToCompactJSON(value[property]);
 
                             newProperty = _.rdf.shrink(property);
-                            json[newProperty] = newValue;
+                            json[newProperty.replace(/:/g,"_")] = newValue;
                         }
                     });
                     return json;
@@ -807,7 +807,7 @@
                                 model.trigger('sync', model, resp, options);
                             }
                         }
-                        options.baseURI = model.url;
+                        options.baseURI = model.url();
                         model.parse(resp, options)
                     };
                     wrapError(this, options);
@@ -1598,6 +1598,13 @@
                         params.xhr = function() {
                             return new ActiveXObject("Microsoft.XMLHTTP");
                         };
+                    }
+
+                    // Adding support for proxied requests
+                    if (LDPResource.proxy && params.url.indexOf('localhost') < 0) {
+                        console.log("Checking the proxy");
+                        console.log(params.url);
+                        params.url = LDPResource.proxy.replace("{uri}", encodeURIComponent(params.url))
                     }
 
                     // Make the request, allowing the user to override any Ajax options.
