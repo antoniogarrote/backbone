@@ -33,7 +33,7 @@
         equal(henry.get('foaf:name'),"Henry J. Story");
         start();
     });
-/*
+
     test("Should provide a compact JSON representation of a model", function() {
         var cate = new this.User({"foaf:name":"Caterina",
                                   "foaf:account":"cate.cova@service.com"});
@@ -85,6 +85,6 @@
 
         ana.set('foaf:name', 'Anita');
     });
-*/
+
 
 })();

@@ -807,6 +807,7 @@
                                 model.trigger('sync', model, resp, options);
                             }
                         }
+                        options.baseURI = model.url;
                         model.parse(resp, options)
                     };
                     wrapError(this, options);
@@ -830,7 +831,7 @@
                         var model = this;
                         // @todo: check parser for media type
                         RDFStore.setBatchLoadEvents(true);
-                        RDFStore.load("text/n3", resp, function(success, results) {
+                        RDFStore.load("text/n3", resp, options, function(success, results) {
                             RDFStore.setBatchLoadEvents(false);
                             RDFStore.node(model.uri, function(res, node){
                                 if(options && options.parseCallback) 
